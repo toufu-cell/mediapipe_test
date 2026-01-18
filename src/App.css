@@ -1,0 +1,361 @@
+/* Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background-color: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+}
+
+/* App Layout */
+.app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+.app-header {
+    text-align: center;
+    padding: 1rem 0;
+    border-bottom: 1px solid #333;
+    margin-bottom: 1rem;
+}
+
+.app-header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #00ff88;
+}
+
+.app-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Pose Detector */
+.pose-detector {
+    position: relative;
+    display: flex;
+    justify-content: center;
+}
+
+.video-container {
+    position: relative;
+    width: 640px;
+    height: 480px;
+    background-color: #000;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.video-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+}
+
+.video-container canvas {
+    transform: scaleX(-1);
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.8);
+    z-index: 10;
+    border-radius: 8px;
+}
+
+.loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #333;
+    border-top-color: #00ff88;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loading-overlay p {
+    margin-top: 1rem;
+    color: #aaa;
+}
+
+/* Error Message */
+.error-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    padding: 2rem;
+    background-color: rgba(255, 0, 0, 0.1);
+    border: 1px solid #ff4444;
+    border-radius: 8px;
+    max-width: 80%;
+}
+
+.error-message p {
+    color: #ff6666;
+    margin-bottom: 1rem;
+}
+
+.error-message button {
+    padding: 0.5rem 1rem;
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.error-message button:hover {
+    background-color: #ff6666;
+}
+
+/* Controls Section */
+.controls-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    background-color: #16213e;
+    border-radius: 8px;
+}
+
+.button-group {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+/* Control Buttons */
+.control-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    background-color: #0f3460;
+    color: white;
+    border: 1px solid #00ff88;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.control-button:hover:not(:disabled) {
+    background-color: #00ff88;
+    color: #1a1a2e;
+}
+
+.control-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.control-button .button-icon {
+    font-size: 1.2rem;
+}
+
+/* Record Button */
+.record-button.recording {
+    background-color: #ff4444;
+    border-color: #ff4444;
+    animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* Record Control */
+.record-control {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.recording-info {
+    text-align: center;
+    font-size: 0.875rem;
+    color: #aaa;
+}
+
+.recording-info.warning {
+    color: #ffaa00;
+}
+
+.recording-info p {
+    margin: 0.25rem 0;
+}
+
+.unsupported-warning {
+    font-size: 0.75rem;
+    color: #ff6666;
+    text-align: center;
+    max-width: 200px;
+}
+
+/* Settings Panel */
+.settings-panel {
+    border-top: 1px solid #333;
+    padding-top: 1rem;
+}
+
+.settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: none;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: color 0.2s;
+}
+
+.settings-toggle:hover {
+    color: #00ff88;
+}
+
+.toggle-icon {
+    font-size: 0.75rem;
+}
+
+.settings-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+.setting-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.setting-item label {
+    font-size: 0.875rem;
+    color: #aaa;
+}
+
+.setting-item input[type="color"] {
+    width: 100%;
+    height: 36px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.setting-item input[type="range"] {
+    width: 100%;
+    accent-color: #00ff88;
+}
+
+/* Error Boundary */
+.error-boundary {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    text-align: center;
+}
+
+.error-boundary h2 {
+    color: #ff4444;
+    margin-bottom: 1rem;
+}
+
+.error-boundary p {
+    color: #aaa;
+    margin-bottom: 1.5rem;
+}
+
+.error-boundary button {
+    padding: 0.75rem 1.5rem;
+    background-color: #00ff88;
+    color: #1a1a2e;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+}
+
+.error-boundary button:hover {
+    background-color: #00cc6a;
+}
+
+/* Browser Warning */
+.browser-warning {
+    text-align: center;
+    padding: 3rem;
+    background-color: #16213e;
+    border-radius: 8px;
+    border: 1px solid #ff4444;
+}
+
+.browser-warning h2 {
+    color: #ff6666;
+    margin-bottom: 1rem;
+}
+
+.browser-warning p {
+    color: #aaa;
+    margin-bottom: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 680px) {
+    .video-container {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 4 / 3;
+    }
+
+    .button-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-button {
+        justify-content: center;
+    }
+}

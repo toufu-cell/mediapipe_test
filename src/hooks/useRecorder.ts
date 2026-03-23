@@ -7,7 +7,7 @@ interface UseRecorderReturn {
     estimatedSize: number;
     isSupported: boolean;
     unsupportedReason: string;
-    startRecording: (stream: MediaStream) => void;
+    startRecording: (videoStream: MediaStream, audioStream?: MediaStream) => void;
     stopRecording: () => void;
     isWarning: boolean;
 }
@@ -115,7 +115,7 @@ export function useRecorder(): UseRecorderReturn {
         setIsRecording(false);
     }, []);
 
-    const startRecording = useCallback((stream: MediaStream) => {
+    const startRecording = useCallback((videoStream: MediaStream, audioStream?: MediaStream) => {
         if (!isSupported) {
             console.warn('Recording not supported:', unsupportedReason);
             return;
@@ -128,7 +128,18 @@ export function useRecorder(): UseRecorderReturn {
         setDuration(0);
         setEstimatedSize(0);
 
-        const mediaRecorder = new MediaRecorder(stream, {
+        // ビデオストリームと音声ストリームを結合
+        const combinedStream = new MediaStream();
+        videoStream.getVideoTracks().forEach(track => {
+            combinedStream.addTrack(track);
+        });
+        if (audioStream) {
+            audioStream.getAudioTracks().forEach(track => {
+                combinedStream.addTrack(track);
+            });
+        }
+
+        const mediaRecorder = new MediaRecorder(combinedStream, {
             mimeType,
             videoBitsPerSecond: 2500000, // 2.5 Mbps
         });

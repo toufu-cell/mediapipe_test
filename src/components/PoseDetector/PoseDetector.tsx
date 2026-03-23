@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { useCameraStream } from './useCameraStream';
 import { useMediaPipe } from './useMediaPipe';
 import { PoseCanvas, type PoseCanvasHandle } from './PoseCanvas';
-import type { PoseSettings } from '../../types/pose';
+import type { PoseSettings, DetectionResult } from '../../types/pose';
 import { DEFAULT_POSE_SETTINGS } from '../../types/pose';
+import { drawDetectionResults } from '../../utils/drawPose';
 
 interface PoseDetectorProps {
     settings?: PoseSettings;
     onCanvasReady?: (handle: PoseCanvasHandle) => void;
     onStreamReady?: (stream: MediaStream) => void;
+    onDetection?: (results: DetectionResult[], timestamp: number) => void;
+    isRecording?: boolean;
 }
 
 const VIDEO_WIDTH = 640;
@@ -19,13 +21,19 @@ export function PoseDetector({
     settings = DEFAULT_POSE_SETTINGS,
     onCanvasReady,
     onStreamReady,
+    onDetection,
+    isRecording = false,
 }: PoseDetectorProps) {
     const { videoRef, stream, error: cameraError, isLoading: cameraLoading, startCamera } = useCameraStream();
-    const { isLoading: mediapipeLoading, error: mediapipeError, detectPose } = useMediaPipe();
-    const [landmarks, setLandmarks] = useState<NormalizedLandmark[] | null>(null);
+    const { isLoading: mediapipeLoading, error: mediapipeError, detect } = useMediaPipe();
+    const [detectionResults, setDetectionResults] = useState<DetectionResult[]>([]);
     const animationFrameRef = useRef<number | undefined>(undefined);
     const lastTimestampRef = useRef<number>(0);
     const canvasHandleRef = useRef<PoseCanvasHandle>(null);
+    const isRecordingRef = useRef<boolean>(false);
+    const detectionResultsRef = useRef<DetectionResult[]>([]);
+    const onDetectionRef = useRef(onDetection);
+    onDetectionRef.current = onDetection;
 
     // カメラ開始
     useEffect(() => {
@@ -46,6 +54,11 @@ export function PoseDetector({
         }
     }, [onCanvasReady]);
 
+    // 録画状態をrefに同期
+    useEffect(() => {
+        isRecordingRef.current = isRecording;
+    }, [isRecording]);
+
     // ポーズ検出ループ
     const runDetection = useCallback(() => {
         const video = videoRef.current;
@@ -57,17 +70,33 @@ export function PoseDetector({
         const timestamp = performance.now();
         // 同じタイムスタンプで連続検出しない
         if (timestamp !== lastTimestampRef.current) {
-            const result = detectPose(video, timestamp);
-            if (result && result.landmarks && result.landmarks.length > 0) {
-                setLandmarks(result.landmarks[0]);
-            } else {
-                setLandmarks(null);
-            }
+            const results = detect(video, timestamp);
+            setDetectionResults(results);
+            detectionResultsRef.current = results;
             lastTimestampRef.current = timestamp;
+
+            // モーション解析用コールバック
+            onDetectionRef.current?.(results, timestamp);
+        }
+
+        // 録画中は録画用Canvasにビデオ+骨格を描画
+        if (isRecordingRef.current && canvasHandleRef.current) {
+            const recordingCanvas = canvasHandleRef.current.getRecordingCanvas();
+            if (recordingCanvas) {
+                const ctx = recordingCanvas.getContext('2d');
+                if (ctx) {
+                    // ビデオフレームを描画
+                    ctx.drawImage(video, 0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
+                    // 検出結果を描画
+                    if (detectionResultsRef.current.length > 0) {
+                        drawDetectionResults(ctx, detectionResultsRef.current, VIDEO_WIDTH, VIDEO_HEIGHT, settings);
+                    }
+                }
+            }
         }
 
         animationFrameRef.current = requestAnimationFrame(runDetection);
-    }, [detectPose, videoRef]);
+    }, [detect, videoRef, settings]);
 
     useEffect(() => {
         if (stream && !mediapipeLoading && !mediapipeError) {
@@ -112,13 +141,14 @@ export function PoseDetector({
                     height={VIDEO_HEIGHT}
                     autoPlay
                     playsInline
+                    webkit-playsinline="true"
                     muted
                     style={{ display: error ? 'none' : 'block' }}
                 />
                 <PoseCanvas
                     ref={canvasHandleRef}
                     videoRef={videoRef}
-                    landmarks={landmarks}
+                    detectionResults={detectionResults}
                     settings={settings}
                     width={VIDEO_WIDTH}
                     height={VIDEO_HEIGHT}

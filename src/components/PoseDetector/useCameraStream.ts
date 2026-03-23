@@ -48,7 +48,34 @@ export function useCameraStream(): UseCameraStreamReturn {
 
             if (videoRef.current) {
                 videoRef.current.srcObject = mediaStream;
-                await videoRef.current.play();
+
+                // メタデータロード完了を待ってから再生
+                await new Promise<void>((resolve, reject) => {
+                    const video = videoRef.current!;
+
+                    const handleLoadedMetadata = () => {
+                        video.play()
+                            .then(() => resolve())
+                            .catch((playError) => {
+                                // 自動再生がブロックされた場合のフォールバック
+                                console.warn('Auto-play blocked:', playError);
+                                // ミュート状態なら通常は再生可能だが、念のためresolve
+                                resolve();
+                            });
+                    };
+
+                    const handleError = () => {
+                        reject(new Error('Video load error'));
+                    };
+
+                    // 既にメタデータがロードされている場合
+                    if (video.readyState >= 1) {
+                        handleLoadedMetadata();
+                    } else {
+                        video.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+                        video.addEventListener('error', handleError, { once: true });
+                    }
+                });
             }
         } catch (err) {
             const error = err as Error;

@@ -43,10 +43,13 @@ docs/
 python/data/*
 python/output/*
 !python/data/.gitkeep
+!python/data/labels.csv
 !python/output/.gitkeep
 python/.venv/
 python/.cache/
 python/.tmp/
 python/.pytest_cache/
+python/tests/fixtures/main_data/output/*
+!python/tests/fixtures/main_data/output/.gitkeep
 __pycache__/
 *.pyc

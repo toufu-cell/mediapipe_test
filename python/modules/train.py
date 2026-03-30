@@ -16,13 +16,22 @@ def train_and_evaluate(
     test_df = features_df[features_df["_data_name"] == test_subject]
 
     x_train = train_df[feature_cols].to_numpy()
-    y_train = train_df["label"].to_numpy()
+    y_train_raw = train_df["label"].to_numpy()
     x_test = test_df[feature_cols].to_numpy()
     y_test = test_df["label"].to_numpy()
 
+    unique_train_labels = sorted(set(int(label) for label in y_train_raw))
+    label_to_encoded = {
+        label: index for index, label in enumerate(unique_train_labels)
+    }
+    encoded_to_label = {
+        index: label for label, index in label_to_encoded.items()
+    }
+    y_train = [label_to_encoded[int(label)] for label in y_train_raw]
+
     clf = XGBClassifier(
         objective="multi:softmax",
-        num_class=len(label_names),
+        num_class=len(unique_train_labels),
         eval_metric="mlogloss",
         n_estimators=32,
         max_depth=4,
@@ -31,16 +40,22 @@ def train_and_evaluate(
     )
     clf.fit(x_train, y_train)
 
-    y_pred = clf.predict(x_test)
+    y_pred_encoded = clf.predict(x_test)
+    y_pred = [encoded_to_label[int(label)] for label in y_pred_encoded]
     accuracy = accuracy_score(y_test, y_pred)
     report = classification_report(
         y_test,
         y_pred,
+        labels=list(range(len(label_names))),
         target_names=label_names,
         output_dict=True,
         zero_division=0,
     )
-    conf_mat = confusion_matrix(y_test, y_pred)
+    conf_mat = confusion_matrix(
+        y_test,
+        y_pred,
+        labels=list(range(len(label_names))),
+    )
 
     return {
         "accuracy": accuracy,

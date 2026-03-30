@@ -40,8 +40,13 @@ docs/
 *.tsbuildinfo
 
 # Python activity-classification subproject
-python/data/*/
-python/output/
+python/data/*
+python/output/*
 !python/data/.gitkeep
 !python/output/.gitkeep
 python/.venv/
+python/.cache/
+python/.tmp/
+python/.pytest_cache/
+__pycache__/
+*.pyc

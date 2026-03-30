@@ -39,3 +39,9 @@ docs/
 # TypeScript cache
 *.tsbuildinfo
 
+# Python activity-classification subproject
+python/data/*/
+python/output/
+!python/data/.gitkeep
+!python/output/.gitkeep
+python/.venv/

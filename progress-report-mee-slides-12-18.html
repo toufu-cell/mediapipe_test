@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>進捗報告スライド 12-18</title>
+    <style>
+        :root {
+            --paper: #ffffff;
+            --ink: #1e2d34;
+            --muted: #5e6b73;
+            --line: #cfd8dc;
+            --blue: #235374;
+            --teal: #287985;
+            --green: #2f7a55;
+            --amber: #bd7e2d;
+            --coral: #b64d43;
+            --soft-blue: #e9f2f6;
+            --soft-green: #eaf4ed;
+            --soft-amber: #f7efe2;
+            --soft-gray: #f6f8f8;
+            --deck-bg: #e7ecef;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            background: var(--deck-bg);
+            scroll-snap-type: y mandatory;
+        }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            font-family: "Yu Gothic", "Hiragino Sans", "Meiryo", sans-serif;
+            line-break: strict;
+            overflow-wrap: break-word;
+        }
+
+        .deck {
+            display: grid;
+            gap: 36px;
+            padding: 36px 0;
+        }
+
+        .slide {
+            position: relative;
+            width: min(100vw, 1600px);
+            height: min(100vh, 900px);
+            aspect-ratio: 16 / 9;
+            margin: 0 auto;
+            padding: 0.42in 0.65in 0.42in;
+            background: var(--paper);
+            box-shadow: 0 24px 80px rgba(30, 45, 52, 0.16);
+            overflow: hidden;
+            scroll-snap-align: start;
+        }
+
+        .page {
+            position: absolute;
+            top: 0.16in;
+            left: 0.18in;
+            width: 0.95in;
+            height: 0.72in;
+            display: grid;
+            place-items: center;
+            color: var(--blue);
+            font-size: 28px;
+            font-weight: 800;
+        }
+
+        h1 {
+            margin: 0 0 0 0.88in;
+            color: var(--ink);
+            font-size: 40px;
+            line-height: 1.16;
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .lead {
+            margin: 0.44in 0 0;
+            color: var(--muted);
+            font-size: 23px;
+            line-height: 1.45;
+            font-weight: 500;
+        }
+
+        .body {
+            position: absolute;
+            left: 0.65in;
+            right: 0.65in;
+            top: 1.85in;
+            bottom: 0.48in;
+        }
+
+        .grid-3,
+        .grid-2,
+        .grid-wide {
+            display: grid;
+            height: 100%;
+            gap: 0.35in;
+            align-items: stretch;
+        }
+
+        .grid-3 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .grid-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .grid-wide {
+            grid-template-columns: 0.9fr 1.35fr;
+        }
+
+        .body.grid-2,
+        .body.grid-3,
+        .body.grid-wide {
+            height: auto;
+        }
+
+        .stack {
+            display: grid;
+            gap: 0.26in;
+        }
+
+        .card {
+            position: relative;
+            min-height: 1.08in;
+            padding: 0.25in 0.28in 0.24in 0.38in;
+            border: 1.5px solid var(--line);
+            background: #fff;
+        }
+
+        .card::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 0.08in;
+            height: 100%;
+            background: var(--blue);
+        }
+
+        .card.green::before {
+            background: var(--green);
+        }
+
+        .card.amber::before {
+            background: var(--amber);
+        }
+
+        .card.coral::before {
+            background: var(--coral);
+        }
+
+        .card.soft-blue {
+            background: var(--soft-blue);
+        }
+
+        .card.soft-green {
+            background: var(--soft-green);
+        }
+
+        .card.soft-amber {
+            background: var(--soft-amber);
+        }
+
+        .label {
+            margin: 0 0 0.12in;
+            color: var(--blue);
+            font-size: 15px;
+            font-weight: 800;
+        }
+
+        .title {
+            margin: 0 0 0.15in;
+            font-size: 25px;
+            line-height: 1.24;
+            font-weight: 800;
+        }
+
+        .text,
+        .bullets {
+            margin: 0;
+            color: var(--muted);
+            font-size: 18px;
+            line-height: 1.45;
+            font-weight: 500;
+        }
+
+        .bullets {
+            padding-left: 0;
+            list-style: none;
+        }
+
+        .bullets li {
+            margin: 0.06in 0;
+        }
+
+        .bullets li::before {
+            content: "・";
+            color: var(--blue);
+            font-weight: 800;
+        }
+
+        .flow {
+            display: grid;
+            grid-template-columns: 1fr 0.25in 1fr 0.25in 1fr;
+            gap: 0.18in;
+            align-items: center;
+        }
+
+        .node {
+            min-height: 1.38in;
+            padding: 0.25in 0.20in;
+            border: 1.5px solid var(--line);
+            background: var(--paper);
+            text-align: center;
+        }
+
+        .node h2 {
+            margin: 0 0 0.12in;
+            font-size: 24px;
+            line-height: 1.2;
+        }
+
+        .node p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.4;
+        }
+
+        .arrow {
+            color: var(--blue);
+            font-size: 34px;
+            font-weight: 800;
+            text-align: center;
+        }
+
+        .placeholder {
+            min-height: 1.08in;
+            display: grid;
+            place-items: center;
+            padding: 0.20in;
+            border: 2px dashed var(--teal);
+            background: var(--soft-gray);
+            text-align: center;
+        }
+
+        .placeholder strong {
+            display: block;
+            color: var(--ink);
+            font-size: 20px;
+            line-height: 1.32;
+        }
+
+        .placeholder span {
+            display: block;
+            margin-top: 0.08in;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.35;
+        }
+
+        .small-note {
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.45;
+        }
+
+        .metric {
+            display: grid;
+            grid-template-columns: 1.05in 1fr 0.62in;
+            gap: 0.16in;
+            align-items: center;
+            margin: 0.18in 0;
+            font-size: 16px;
+            font-weight: 800;
+        }
+
+        .bar-track {
+            height: 0.16in;
+            background: #e6ecee;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: var(--blue);
+        }
+
+        .bar-fill.green {
+            background: var(--green);
+        }
+
+        .bar-fill.amber {
+            background: var(--amber);
+        }
+
+        .compare {
+            display: grid;
+            gap: 0.10in;
+            align-content: start;
+        }
+
+        .caption {
+            margin-top: 0.16in;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.45;
+        }
+
+        .action-chart {
+            padding: 0.28in 0.32in;
+            border: 1.5px solid var(--line);
+            background: #fff;
+        }
+
+        .action-row {
+            display: grid;
+            grid-template-columns: 1.42in 1fr 0.78in;
+            gap: 0.16in;
+            align-items: center;
+            margin: 0.18in 0;
+            min-height: 0.32in;
+        }
+
+        .action-name {
+            color: var(--ink);
+            font-size: 16px;
+            font-weight: 800;
+            line-height: 1.25;
+        }
+
+        .action-name span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .action-track {
+            height: 0.18in;
+            background: #e6ecee;
+        }
+
+        .action-fill {
+            height: 100%;
+            background: var(--green);
+        }
+
+        .action-fill.mid {
+            background: var(--amber);
+        }
+
+        .action-fill.low {
+            background: var(--coral);
+        }
+
+        .action-value {
+            color: var(--ink);
+            font-size: 16px;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+        @media print {
+            html,
+            body {
+                background: #fff;
+            }
+
+            .deck {
+                gap: 0;
+                padding: 0;
+            }
+
+            .slide {
+                width: 100vw;
+                height: 100vh;
+                box-shadow: none;
+                page-break-after: always;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="deck">
+        <section class="slide">
+            <div class="page">12</div>
+            <h1>進捗1：収録基盤を作成</h1>
+            <p class="lead">PCから同じsession IDで、iPhone映像とApple Watch IMUを同時に記録できるようにした</p>
+            <div class="body stack">
+                <div class="flow">
+                    <div class="node">
+                        <h2>PC</h2>
+                        <p>start / stop command<br>session IDを発行</p>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="node">
+                        <h2>iPhone Recorder</h2>
+                        <p>front camera .mov<br>Photosにも保存</p>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="node">
+                        <h2>Apple Watch</h2>
+                        <p>CoreMotionでIMU記録<br>CSVをiPhoneへ転送</p>
+                    </div>
+                </div>
+                <div class="grid-3">
+                    <div class="card green">
+                        <p class="label">できたこと</p>
+                        <p class="title">撮影開始から保存までを一連化</p>
+                        <ul class="bullets">
+                            <li>PC操作で撮影開始・停止</li>
+                            <li>映像とIMUを同一sessionで保存</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <p class="label">安定化した点</p>
+                        <p class="title">Watch側の記録継続と転送</p>
+                        <ul class="bullets">
+                            <li>Extended Runtimeで記録を継続</li>
+                            <li>WatchConnectivity queue送信</li>
+                        </ul>
+                    </div>
+                    <div class="placeholder">
+                        <div>
+                            <strong>収録システムの実機写真</strong>
+                            <span>PC / iPhone / Apple Watch の配置が分かる写真</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="page">13</div>
+            <h1>進捗2：iOSとIMUの収集データを整理</h1>
+            <p class="lead">後段の同期・分類で使えるように、映像・音声・手首IMUの保存形式を揃えた</p>
+            <div class="body stack">
+                <div class="grid-3">
+                    <div class="card green soft-green">
+                        <p class="label">iPhone側</p>
+                        <p class="title">映像を中心に記録</p>
+                        <ul class="bullets">
+                            <li>front cameraの .mov</li>
+                            <li>mic許可があれば音声も含む</li>
+                            <li>Photosへ保存</li>
+                            <li>session_idでWatch記録と対応</li>
+                        </ul>
+                    </div>
+                    <div class="card soft-blue">
+                        <p class="label">Watch IMU側</p>
+                        <p class="title">手首運動をCSV化</p>
+                        <ul class="bullets">
+                            <li>timestamp_ms / elapsed_ms</li>
+                            <li>userAcceleration: accel_x,y,z</li>
+                            <li>rotationRate: gyro_x,y,z</li>
+                            <li>3軸から accel_norm / gyro_norm を計算</li>
+                        </ul>
+                    </div>
+                    <div class="card amber soft-amber">
+                        <p class="label">統合の単位</p>
+                        <p class="title">session_idで対応付け</p>
+                        <ul class="bullets">
+                            <li>CSV schemaを固定</li>
+                            <li>欠損や型差分を処理しやすくした</li>
+                            <li>同期処理への入力にできる</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="placeholder">
+                    <div>
+                        <strong>データ一覧表またはCSV先頭行</strong>
+                        <span>session_id, timestamp_ms, elapsed_ms, accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, accel_norm, gyro_norm</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="page">14</div>
+            <h1>進捗3：動画とIMUの同期処理を作成</h1>
+            <p class="lead">開始直後の「手首を3回振る」動作から、PoseとIMUの時間ずれを推定する</p>
+            <div class="body stack">
+                <div class="flow">
+                    <div class="card">
+                        <p class="label">同期に使った信号</p>
+                        <p class="title">手首の動きの強さ</p>
+                        <ul class="bullets">
+                            <li>動画: Pose手首座標から速度を計算</li>
+                            <li>Watch: rotationRate 3軸からgyro_normを計算</li>
+                        </ul>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="card green">
+                        <p class="label">推定方法</p>
+                        <p class="title">3ピークの組を探索</p>
+                        <ul class="bullets">
+                            <li>ピーク間隔の一致</li>
+                            <li>offsetの安定性で選択</li>
+                        </ul>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="card amber">
+                        <p class="label">出力</p>
+                        <p class="title">同期済みデータ</p>
+                        <ul class="bullets">
+                            <li>sync_metadata.json</li>
+                            <li>synced_pose_imu.csv</li>
+                            <li>sync_diagnostic.png</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="placeholder">
+                    <div>
+                        <strong>sync_diagnostic.png</strong>
+                        <span>動画由来の手首速度と、Watch由来の回転の強さを並べて、3回振りのピークとoffsetを示す</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="page">15</div>
+            <h1>進捗4：調理行動データセットを拡張</h1>
+            <p class="lead">野菜カットから魚処理へ対象を広げ、細かな調理行動の分類に進めた</p>
+            <div class="body stack">
+                <div class="grid-2">
+                    <div class="card green soft-green">
+                        <p class="label">野菜カット：cooking_20260602</p>
+                        <p class="title">切り方の分類</p>
+                        <ul class="bullets">
+                            <li>labels: other / peak / ranngiri / wagiri</li>
+                            <li>5 capturesでLOSO評価</li>
+                            <li>pose only と combined を比較</li>
+                        </ul>
+                    </div>
+                    <div class="card soft-blue">
+                        <p class="label">魚処理：fish_project5_7subjects</p>
+                        <p class="title">処理工程の分類</p>
+                        <ul class="bullets">
+                            <li>labels: other / uroko / atama / naziou / haraarau / sannmai</li>
+                            <li>7 subjectsでmodality比較</li>
+                            <li>行動別accuracyまで確認</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="grid-2">
+                    <div class="placeholder">
+                        <div>
+                            <strong>Label Studioのアノテーション画面</strong>
+                            <span>行動区間ラベルが時系列に付いていることを見せる</span>
+                        </div>
+                    </div>
+                    <div class="placeholder">
+                        <div>
+                            <strong>各行動の代表フレーム</strong>
+                            <span>ranngiri / wagiri / uroko / sannmai などを並べる</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="page">16</div>
+            <h1>進捗5：野菜カット分類の評価</h1>
+            <p class="lead">Watch IMUを加えたcombinedで、pose onlyより平均accuracyとmacro F1が上がった</p>
+            <div class="body grid-wide">
+                <div class="stack">
+                    <div class="card soft-blue">
+                        <p class="label">pose only</p>
+                        <p class="title">accuracy 0.582</p>
+                        <p class="text">macro F1 0.627</p>
+                    </div>
+                    <div class="card green soft-green">
+                        <p class="label">combined</p>
+                        <p class="title">accuracy 0.630</p>
+                        <p class="text">macro F1 0.656</p>
+                    </div>
+                    <p class="small-note">同一データセット内では、Watch IMU追加により accuracy +0.048、macro F1 +0.029。</p>
+                </div>
+                <div>
+                    <div class="placeholder" style="height: 3.85in;">
+                        <div>
+                            <strong>棒グラフ：野菜カットの評価比較</strong>
+                            <span>pose only vs combined。accuracy / macro F1 を2系列で表示</span>
+                        </div>
+                    </div>
+                    <p class="caption">改善はあるが、被験者・動作数を増やして再確認する必要がある。</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="page">17</div>
+            <h1>進捗6：魚処理分類では行動ごとに難しさが異なる</h1>
+            <p class="lead">全体平均より、どの行動で失敗しているかを見る方が次の改善につながる</p>
+            <div class="body grid-wide">
+                <div class="action-chart">
+                    <p class="label">combined条件の行動別accuracy</p>
+                    <div class="action-row">
+                        <div class="action-name">uroko<span>鱗をかく</span></div>
+                        <div class="action-track"><div class="action-fill" style="width: 81.4%;"></div></div>
+                        <div class="action-value">0.814</div>
+                    </div>
+                    <div class="action-row">
+                        <div class="action-name">atama<span>頭を取る</span></div>
+                        <div class="action-track"><div class="action-fill mid" style="width: 53.1%;"></div></div>
+                        <div class="action-value">0.531</div>
+                    </div>
+                    <div class="action-row">
+                        <div class="action-name">naziou<span>内臓を取る</span></div>
+                        <div class="action-track"><div class="action-fill low" style="width: 11.5%;"></div></div>
+                        <div class="action-value">0.115</div>
+                    </div>
+                    <div class="action-row">
+                        <div class="action-name">haraarau<span>腹を洗う</span></div>
+                        <div class="action-track"><div class="action-fill" style="width: 83.3%;"></div></div>
+                        <div class="action-value">0.833</div>
+                    </div>
+                    <div class="action-row">
+                        <div class="action-name">sannmai<span>三枚おろし</span></div>
+                        <div class="action-track"><div class="action-fill" style="width: 78.7%;"></div></div>
+                        <div class="action-value">0.787</div>
+                    </div>
+                    <p class="small-note">naziouだけ極端に低く、全体accuracyだけでは見えにくい失敗が残っている。</p>
+                </div>
+                <div class="stack">
+                    <div class="card coral">
+                        <p class="label">見えてきたこと</p>
+                        <p class="title">naziouが分類できていない</p>
+                        <ul class="bullets">
+                            <li>内臓処理は手元が隠れやすい</li>
+                            <li>姿勢差が小さく、他工程と混同しやすい</li>
+                        </ul>
+                    </div>
+                    <div class="card soft-blue">
+                        <p class="label">補足：modality比較</p>
+                        <p class="title">combinedの改善幅は小さい</p>
+                        <ul class="bullets">
+                            <li>video accuracy 0.669</li>
+                            <li>combined accuracy 0.674</li>
+                        </ul>
+                    </div>
+                    <div class="card green soft-green">
+                        <p class="label">次に確認する点</p>
+                        <p class="title">失敗クラスを掘る</p>
+                        <ul class="bullets">
+                            <li>naziouの誤分類先</li>
+                            <li>失敗フレームで手・道具・魚体の見え方を確認</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="page">18</div>
+            <h1>進捗7：次に見るべき失敗箇所を整理</h1>
+            <p class="lead">魚処理ではnaziouが特に難しく、行動別の失敗分析が必要になった</p>
+            <div class="body stack">
+                <div class="grid-3">
+                    <div class="card coral">
+                        <p class="label">行動別accuracy</p>
+                        <p class="title">naziouが低い</p>
+                        <ul class="bullets">
+                            <li>uroko 0.814</li>
+                            <li>atama 0.531</li>
+                            <li>naziou 0.115</li>
+                            <li>haraarau 0.833</li>
+                            <li>sannmai 0.787</li>
+                        </ul>
+                    </div>
+                    <div class="card amber soft-amber">
+                        <p class="label">考えられる要因</p>
+                        <p class="title">細かく隠れやすい動作</p>
+                        <ul class="bullets">
+                            <li>内臓処理は手元が隠れやすい</li>
+                            <li>姿勢差が小さい</li>
+                            <li>道具・魚体との相対位置が不足</li>
+                        </ul>
+                    </div>
+                    <div class="card green soft-green">
+                        <p class="label">次の実装候補</p>
+                        <p class="title">特徴量と分析を追加</p>
+                        <ul class="bullets">
+                            <li>利き手基準の正規化</li>
+                            <li>手・道具・作業台の相対特徴</li>
+                            <li>クラス別誤分類の可視化</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="grid-2">
+                    <div class="placeholder">
+                        <div>
+                            <strong>行動別accuracyグラフ</strong>
+                            <span>combinedでnaziouだけ低いことを強調</span>
+                        </div>
+                    </div>
+                    <div class="placeholder">
+                        <div>
+                            <strong>confusion matrix / 失敗例フレーム</strong>
+                            <span>naziouがどのクラスへ混同されたか、代表フレームを添える</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>進捗報告 2026-07-07</title>
+    <style>
+        :root {
+            --paper: #f8faf7;
+            --white: #ffffff;
+            --ink: #1d2528;
+            --muted: #647174;
+            --line: #d8dfdc;
+            --teal: #176a82;
+            --green: #176b2c;
+            --amber: #c58418;
+            --coral: #bc5144;
+            --soft-teal: #d9edf0;
+            --soft-green: #dcebdd;
+            --soft-amber: #f2e3c7;
+            --soft-coral: #f0d7d3;
+            --shadow: 0 24px 70px rgba(29, 37, 40, 0.16);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-snap-type: y mandatory;
+            background: #e7ece9;
+        }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            font-family: "Hiragino Sans", "Yu Gothic", "YuGothic", "Meiryo", sans-serif;
+            line-break: strict;
+            overflow-wrap: break-word;
+        }
+
+        .deck {
+            display: grid;
+            gap: 36px;
+            padding: 36px 0;
+        }
+
+        .slide {
+            width: min(100vw, 1600px);
+            height: min(100vh, 900px);
+            aspect-ratio: 16 / 9;
+            margin: 0 auto;
+            padding: 54px 64px 42px;
+            background: var(--paper);
+            box-shadow: var(--shadow);
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            gap: 28px;
+            overflow: hidden;
+            scroll-snap-align: start;
+        }
+
+        .slide-header {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 28px;
+            align-items: start;
+            border-bottom: 2px solid var(--line);
+            padding-bottom: 18px;
+        }
+
+        .eyebrow {
+            margin: 0 0 8px;
+            color: var(--teal);
+            font-size: 22px;
+            font-weight: 850;
+        }
+
+        h1,
+        h2,
+        h3,
+        p {
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 58px;
+            line-height: 1.12;
+            letter-spacing: 0;
+        }
+
+        h2 {
+            font-size: 46px;
+            line-height: 1.16;
+            letter-spacing: 0;
+        }
+
+        h3 {
+            font-size: 25px;
+            line-height: 1.28;
+        }
+
+        .lead {
+            margin-top: 14px;
+            color: var(--muted);
+            font-size: 24px;
+            line-height: 1.55;
+            font-weight: 650;
+        }
+
+        .date-chip {
+            min-width: 212px;
+            padding: 16px 20px;
+            border: 2px solid var(--line);
+            border-radius: 8px;
+            text-align: right;
+            font-weight: 850;
+            color: var(--teal);
+            background: var(--white);
+        }
+
+        .date-chip span {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 15px;
+            font-weight: 750;
+        }
+
+        .slide-body {
+            min-height: 0;
+        }
+
+        .slide-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            color: var(--muted);
+            border-top: 2px solid var(--line);
+            padding-top: 14px;
+            font-size: 15px;
+            font-weight: 750;
+        }
+
+        .page-number {
+            color: var(--teal);
+            font-weight: 900;
+        }
+
+        .big-grid {
+            display: grid;
+            grid-template-columns: 1.05fr 0.95fr;
+            gap: 40px;
+            height: 100%;
+            align-items: center;
+        }
+
+        .claim {
+            display: grid;
+            gap: 24px;
+        }
+
+        .claim-box {
+            padding: 24px 28px;
+            border-radius: 8px;
+            background: var(--green);
+            color: var(--white);
+        }
+
+        .claim-box strong {
+            display: block;
+            font-size: 33px;
+            line-height: 1.25;
+        }
+
+        .claim-box span {
+            display: block;
+            margin-top: 10px;
+            font-size: 18px;
+            line-height: 1.55;
+            font-weight: 700;
+            opacity: 0.94;
+        }
+
+        .pipeline {
+            display: grid;
+            gap: 14px;
+        }
+
+        .pipe-step,
+        .system-node,
+        .dataset-card,
+        .metric-card,
+        .next-card {
+            border: 2px solid var(--line);
+            border-radius: 8px;
+            background: var(--white);
+        }
+
+        .pipe-step {
+            display: grid;
+            grid-template-columns: 54px 1fr;
+            gap: 16px;
+            padding: 17px 19px;
+            align-items: center;
+        }
+
+        .badge {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            color: var(--white);
+            background: var(--teal);
+            font-size: 20px;
+            font-weight: 900;
+        }
+
+        .pipe-step:nth-child(2) .badge,
+        .system-node.iphone .badge {
+            background: var(--amber);
+        }
+
+        .pipe-step:nth-child(3) .badge,
+        .system-node.watch .badge {
+            background: var(--green);
+        }
+
+        .pipe-step:nth-child(4) .badge {
+            background: var(--coral);
+        }
+
+        .pipe-step strong {
+            display: block;
+            font-size: 24px;
+            line-height: 1.24;
+        }
+
+        .pipe-step span {
+            display: block;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.45;
+            font-weight: 700;
+        }
+
+        .system-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 22px;
+            height: 100%;
+            align-items: stretch;
+        }
+
+        .system-node {
+            padding: 26px 24px;
+            display: grid;
+            grid-template-rows: auto auto 1fr auto;
+            gap: 16px;
+        }
+
+        .system-node p,
+        .dataset-card p,
+        .metric-card p,
+        .next-card p {
+            color: var(--muted);
+            font-size: 18px;
+            line-height: 1.55;
+            font-weight: 700;
+        }
+
+        .file-pill {
+            align-self: end;
+            padding: 12px 14px;
+            border-radius: 8px;
+            background: var(--soft-teal);
+            color: #28474d;
+            font-size: 15px;
+            line-height: 1.45;
+            font-weight: 850;
+        }
+
+        .system-node.iphone .file-pill {
+            background: var(--soft-amber);
+        }
+
+        .system-node.watch .file-pill {
+            background: var(--soft-green);
+        }
+
+        .sync-grid {
+            display: grid;
+            grid-template-columns: 0.9fr 1.1fr;
+            gap: 36px;
+            height: 100%;
+            align-items: center;
+        }
+
+        .signal-panel {
+            display: grid;
+            gap: 18px;
+        }
+
+        .wave-card {
+            padding: 20px 22px;
+            border: 2px solid var(--line);
+            border-radius: 8px;
+            background: var(--white);
+        }
+
+        .wave-card h3 {
+            margin-bottom: 12px;
+        }
+
+        .wave-card svg {
+            display: block;
+            width: 100%;
+            height: 120px;
+        }
+
+        .output-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .output-item {
+            padding: 18px 20px;
+            border-left: 8px solid var(--teal);
+            border-radius: 8px;
+            background: var(--white);
+            box-shadow: inset 0 0 0 2px var(--line);
+        }
+
+        .output-item:nth-child(2) {
+            border-left-color: var(--green);
+        }
+
+        .output-item:nth-child(3) {
+            border-left-color: var(--amber);
+        }
+
+        .output-item strong {
+            display: block;
+            font-size: 24px;
+            line-height: 1.25;
+        }
+
+        .output-item span {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.45;
+            font-weight: 700;
+        }
+
+        .dataset-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+            height: 100%;
+        }
+
+        .dataset-card {
+            padding: 28px 30px;
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 20px;
+        }
+
+        .label-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-content: start;
+        }
+
+        .label {
+            padding: 10px 13px;
+            border-radius: 999px;
+            background: var(--soft-teal);
+            color: #254b53;
+            font-size: 17px;
+            font-weight: 850;
+        }
+
+        .dataset-card.fish .label {
+            background: var(--soft-green);
+            color: #244529;
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .stat {
+            padding: 14px 16px;
+            border-radius: 8px;
+            background: #eef3f0;
+        }
+
+        .stat strong {
+            display: block;
+            color: var(--teal);
+            font-size: 29px;
+            line-height: 1.15;
+        }
+
+        .stat span {
+            display: block;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.35;
+            font-weight: 800;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 0.95fr 1.05fr;
+            gap: 30px;
+            height: 100%;
+            align-items: stretch;
+        }
+
+        .metric-card {
+            padding: 26px 28px;
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 18px;
+        }
+
+        .bar-chart {
+            display: grid;
+            gap: 16px;
+            align-content: center;
+        }
+
+        .bar-row {
+            display: grid;
+            grid-template-columns: 120px 1fr 82px;
+            gap: 14px;
+            align-items: center;
+            font-size: 18px;
+            font-weight: 850;
+        }
+
+        .bar-row span {
+            white-space: nowrap;
+        }
+
+        .bar-track {
+            height: 22px;
+            border-radius: 999px;
+            background: #edf2ef;
+            overflow: hidden;
+        }
+
+        .bar {
+            height: 100%;
+            border-radius: inherit;
+            background: var(--teal);
+        }
+
+        .bar.pose,
+        .bar.watch {
+            background: var(--amber);
+        }
+
+        .bar.video {
+            background: var(--teal);
+        }
+
+        .bar.combined {
+            background: var(--green);
+        }
+
+        .bar.problem {
+            background: var(--coral);
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.5;
+            font-weight: 750;
+        }
+
+        .next-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 22px;
+            height: 100%;
+            align-items: stretch;
+        }
+
+        .next-card {
+            padding: 28px 26px;
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 18px;
+        }
+
+        .next-card .badge {
+            width: 54px;
+            height: 54px;
+            border-radius: 8px;
+            font-size: 22px;
+        }
+
+        .next-card:nth-child(2) .badge {
+            background: var(--coral);
+        }
+
+        .next-card:nth-child(3) .badge {
+            background: var(--amber);
+        }
+
+        .callout {
+            align-self: end;
+            padding: 16px 18px;
+            border-radius: 8px;
+            background: var(--soft-teal);
+            color: #28474d;
+            font-size: 16px;
+            line-height: 1.45;
+            font-weight: 850;
+        }
+
+        .next-card:nth-child(2) .callout {
+            background: var(--soft-coral);
+            color: #563530;
+        }
+
+        .next-card:nth-child(3) .callout {
+            background: var(--soft-amber);
+            color: #5b411e;
+        }
+
+        @media print {
+            html,
+            body {
+                background: var(--paper);
+            }
+
+            .deck {
+                display: block;
+                padding: 0;
+            }
+
+            .slide {
+                width: 100vw;
+                height: 100vh;
+                margin: 0;
+                box-shadow: none;
+                page-break-after: always;
+                break-after: page;
+            }
+        }
+
+        @media (max-width: 900px) {
+            html {
+                scroll-snap-type: none;
+            }
+
+            .deck {
+                padding: 0;
+                gap: 0;
+            }
+
+            .slide {
+                width: 100%;
+                height: auto;
+                min-height: 100vh;
+                aspect-ratio: auto;
+                padding: 30px 22px;
+                box-shadow: none;
+            }
+
+            .slide-header,
+            .big-grid,
+            .system-grid,
+            .sync-grid,
+            .dataset-grid,
+            .metrics-grid,
+            .next-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 38px;
+            }
+
+            h2 {
+                font-size: 32px;
+            }
+
+            .lead {
+                font-size: 18px;
+            }
+
+            .date-chip {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="deck" aria-label="5月25日から7月7日までの進捗報告スライドデッキ">
+        <section class="slide" aria-label="全体サマリー">
+            <header class="slide-header">
+                <div>
+                    <p class="eyebrow">MediaPipe 調理行動認識 / 進捗報告</p>
+                    <h1>収録から分類評価までを接続</h1>
+                    <p class="lead">iPhone 映像と Apple Watch IMU を同じ session として扱い、同期済み特徴量から調理動作を評価できる段階に進んだ。</p>
+                </div>
+                <div class="date-chip">
+                    2026.05.25 - 07.07
+                    <span>実装・実験サマリー</span>
+                </div>
+            </header>
+            <div class="slide-body big-grid">
+                <div class="claim">
+                    <h2>今回の成果は「評価できる実験系」になったこと</h2>
+                    <div class="claim-box">
+                        <strong>記録、同期、特徴量化、分類評価を一続きにした。</strong>
+                        <span>個別の検出アプリから、調理動作をデータとして集めて比較できる研究基盤へ拡張した。</span>
+                    </div>
+                </div>
+                <div class="pipeline" aria-label="進捗の流れ">
+                    <div class="pipe-step">
+                        <div class="badge">1</div>
+                        <div><strong>収録基盤</strong><span>PC command で iPhone と Watch を同じ session にまとめる。</span></div>
+                    </div>
+                    <div class="pipe-step">
+                        <div class="badge">2</div>
+                        <div><strong>同期処理</strong><span>3回振り gesture から Pose と IMU の時刻差を補正する。</span></div>
+                    </div>
+                    <div class="pipe-step">
+                        <div class="badge">3</div>
+                        <div><strong>調理データ</strong><span>野菜カットと魚処理のラベル付き motion.csv を作る。</span></div>
+                    </div>
+                    <div class="pipe-step">
+                        <div class="badge">4</div>
+                        <div><strong>分類評価</strong><span>watch / video / combined の性能差を同条件で見る。</span></div>
+                    </div>
+                </div>
+            </div>
+            <footer class="slide-footer">
+                <span>以降は進捗ごとに分解</span>
+                <span class="page-number">01 / 06</span>
+            </footer>
+        </section>
+
+        <section class="slide" aria-label="収録基盤">
+            <header class="slide-header">
+                <div>
+                    <p class="eyebrow">Progress 1 / Capture System</p>
+                    <h2>PC を司令塔にして、動画と手首 IMU を同じ session にした</h2>
+                    <p class="lead">iPhone は映像、Apple Watch は手首の動きを担当し、session ID で後処理時に紐づける。</p>
+                </div>
+                <div class="date-chip">実装済み<span>iOS / watchOS</span></div>
+            </header>
+            <div class="slide-body system-grid">
+                <article class="system-node">
+                    <div class="badge">PC</div>
+                    <h3>Capture Session</h3>
+                    <p>Start / Stop command を作り、iPhone TCP :8765 へ送る。session ID、予定開始時刻、同期 gesture を固定する。</p>
+                    <div class="file-pill">command: start / stop JSON</div>
+                </article>
+                <article class="system-node iphone">
+                    <div class="badge">iOS</div>
+                    <h3>iPhone Recorder</h3>
+                    <p>front camera で調理動画を記録し、録画後に Photos に保存する。Watch へ同じ command を relay する。</p>
+                    <div class="file-pill">output: &lt;sessionId&gt;.mov</div>
+                </article>
+                <article class="system-node watch">
+                    <div class="badge">W</div>
+                    <h3>Apple Watch IMU</h3>
+                    <p>CoreMotion の userAcceleration と rotationRate を記録し、CSV を iPhone へ転送する。</p>
+                    <div class="file-pill">output: accel / gyro / norm CSV</div>
+                </article>
+            </div>
+            <footer class="slide-footer">
+                <span>低負担に「同じ調理行動」を映像と手首センサで記録する土台</span>
+                <span class="page-number">02 / 06</span>
+            </footer>
+        </section>
+
+        <section class="slide" aria-label="同期処理">
+            <header class="slide-header">
+                <div>
+                    <p class="eyebrow">Progress 2 / Synchronization</p>
+                    <h2>3回振り gesture で Pose と IMU の時刻を合わせる</h2>
+                    <p class="lead">動画側の手首速度と Watch 側の gyro_norm のピークを対応させ、残った offset を推定する。</p>
+                </div>
+                <div class="date-chip">実装済み<span>sync_session.py</span></div>
+            </header>
+            <div class="slide-body sync-grid">
+                <div class="signal-panel">
+                    <div class="wave-card">
+                        <h3>Video signal: wrist speed</h3>
+                        <svg viewBox="0 0 520 120" role="img" aria-label="手首速度のピーク例">
+                            <polyline points="0,92 45,89 86,87 120,34 152,88 192,86 235,27 269,89 315,87 365,31 402,90 520,88" fill="none" stroke="#176a82" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <line x1="120" y1="18" x2="120" y2="102" stroke="#bc5144" stroke-width="3"/>
+                            <line x1="235" y1="18" x2="235" y2="102" stroke="#bc5144" stroke-width="3"/>
+                            <line x1="365" y1="18" x2="365" y2="102" stroke="#bc5144" stroke-width="3"/>
+                        </svg>
+                    </div>
+                    <div class="wave-card">
+                        <h3>Watch signal: gyro_norm</h3>
+                        <svg viewBox="0 0 520 120" role="img" aria-label="ジャイロノルムのピーク例">
+                            <polyline points="0,90 52,89 108,88 145,36 178,87 222,88 263,28 300,89 338,88 398,32 430,89 520,88" fill="none" stroke="#176b2c" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <line x1="145" y1="18" x2="145" y2="102" stroke="#bc5144" stroke-width="3"/>
+                            <line x1="263" y1="18" x2="263" y2="102" stroke="#bc5144" stroke-width="3"/>
+                            <line x1="398" y1="18" x2="398" y2="102" stroke="#bc5144" stroke-width="3"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="output-list">
+                    <div class="output-item">
+                        <strong>offset_ms を推定</strong>
+                        <span>3つのピーク間隔と offset のばらつきから、安定した対応だけを採用する。</span>
+                    </div>
+                    <div class="output-item">
+                        <strong>synced_pose_imu.csv を出力</strong>
+                        <span>Pose timestamp に最も近い IMU サンプルを結合し、分類入力へつなげる。</span>
+                    </div>
+                    <div class="output-item">
+                        <strong>sync_diagnostic.png を生成</strong>
+                        <span>同期が合っているかを目視確認できる補助図として残す。</span>
+                    </div>
+                </div>
+            </div>
+            <footer class="slide-footer">
+                <span>このスライドには実データの diagnostic plot を差し替え画像として載せると説得力が上がる</span>
+                <span class="page-number">03 / 06</span>
+            </footer>
+        </section>
+
+        <section class="slide" aria-label="調理動作データセット">
+            <header class="slide-header">
+                <div>
+                    <p class="eyebrow">Progress 3 / Dataset</p>
+                    <h2>調理動作ラベルを持つデータセットを作成</h2>
+                    <p class="lead">基礎動作ではなく、包丁作業や魚処理の工程を分類対象として扱えるようになった。</p>
+                </div>
+                <div class="date-chip">作成済み<span>Label Studio + motion.csv</span></div>
+            </header>
+            <div class="slide-body dataset-grid">
+                <article class="dataset-card">
+                    <h3>野菜カット: cooking_20260602</h3>
+                    <p>5 capture。包丁作業の違いを小さな分類対象として試したデータセット。</p>
+                    <div class="label-list" aria-label="野菜カットラベル">
+                        <span class="label">peak</span>
+                        <span class="label">ranngiri</span>
+                        <span class="label">wagiri</span>
+                        <span class="label">other</span>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat"><strong>5</strong><span>captures</span></div>
+                        <div class="stat"><strong>3</strong><span>target labels</span></div>
+                        <div class="stat"><strong>Pose+IMU</strong><span>評価済み</span></div>
+                    </div>
+                </article>
+                <article class="dataset-card fish">
+                    <h3>魚処理: fish project5</h3>
+                    <p>7 subjects。魚をさばく工程を Label Studio で付与し、Hand / Pose / IMU を統合。</p>
+                    <div class="label-list" aria-label="魚処理ラベル">
+                        <span class="label">uroko</span>
+                        <span class="label">atama</span>
+                        <span class="label">naziou</span>
+                        <span class="label">haraarau</span>
+                        <span class="label">sannmai</span>
+                        <span class="label">other</span>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat"><strong>7</strong><span>subjects</span></div>
+                        <div class="stat"><strong>5</strong><span>target labels</span></div>
+                        <div class="stat"><strong>3</strong><span>modalities</span></div>
+                    </div>
+                </article>
+            </div>
+            <footer class="slide-footer">
+                <span>このスライドには、Label Studio 画面や実験動画の静止画を入れるとデータの実感が出る</span>
+                <span class="page-number">04 / 06</span>
+            </footer>
+        </section>
+
+        <section class="slide" aria-label="分類評価">
+            <header class="slide-header">
+                <div>
+                    <p class="eyebrow">Progress 4 / Classification</p>
+                    <h2>Video が主に効き、IMU は補助特徴として評価できるようになった</h2>
+                    <p class="lead">データセットが異なるため、各枠内の差を見る。指標は Accuracy。</p>
+                </div>
+                <div class="date-chip">評価済み<span>LOSO / XGBoost</span></div>
+            </header>
+            <div class="slide-body metrics-grid">
+                <article class="metric-card">
+                    <h3>野菜カット: cooking_20260602</h3>
+                    <p>Pose に IMU を加えると平均 accuracy が +0.048。</p>
+                    <div class="bar-chart" aria-label="野菜カット分類結果">
+                        <div class="bar-row">
+                            <span>Pose only</span>
+                            <div class="bar-track"><div class="bar pose" style="width: 58.2%;"></div></div>
+                            <span>0.582</span>
+                        </div>
+                        <div class="bar-row">
+                            <span>Pose+IMU</span>
+                            <div class="bar-track"><div class="bar combined" style="width: 63.0%;"></div></div>
+                            <span>0.630</span>
+                        </div>
+                    </div>
+                    <p class="note">5 captures の平均値。魚処理とは直接比較しない。</p>
+                </article>
+                <article class="metric-card">
+                    <h3>魚処理: fish project5 / 7 subjects</h3>
+                    <p>Watch 単体より Video が強く、Combined はわずかに上積み。</p>
+                    <div class="bar-chart" aria-label="魚処理分類結果">
+                        <div class="bar-row">
+                            <span>Watch</span>
+                            <div class="bar-track"><div class="bar watch" style="width: 50.8%;"></div></div>
+                            <span>0.508</span>
+                        </div>
+                        <div class="bar-row">
+                            <span>Video</span>
+                            <div class="bar-track"><div class="bar video" style="width: 66.9%;"></div></div>
+                            <span>0.669</span>
+                        </div>
+                        <div class="bar-row">
+                            <span>Combined</span>
+                            <div class="bar-track"><div class="bar combined" style="width: 67.4%;"></div></div>
+                            <span>0.674</span>
+                        </div>
+                    </div>
+                    <p class="note">Video 特徴が分類を支え、IMU 統合の改善幅は小さい。</p>
+                </article>
+            </div>
+            <footer class="slide-footer">
+                <span>ここが本編の主グラフ。追加するなら実際の混同行列を右下に小さく置く</span>
+                <span class="page-number">05 / 06</span>
+            </footer>
+        </section>
+
+        <section class="slide" aria-label="評価結果の読み方と次に確認する点">
+            <header class="slide-header">
+                <div>
+                    <p class="eyebrow">Next / What To Show</p>
+                    <h2>次は「なぜ効いたか・なぜ外したか」を見せる</h2>
+                    <p class="lead">進捗報告では modality 比較を主役にし、原因分析は別スライドや補助資料で見せる。</p>
+                </div>
+                <div class="date-chip">次の説明<span>グラフ配置案</span></div>
+            </header>
+            <div class="slide-body next-grid">
+                <article class="next-card">
+                    <div class="badge">A</div>
+                    <h3>本編: modality 比較</h3>
+                    <p>watch / video / combined の差を見せる。今回の成果である「比較できる pipeline」を一番短く説明できる。</p>
+                    <div class="callout">載せる場所: 5枚目の分類評価</div>
+                </article>
+                <article class="next-card">
+                    <div class="badge">B</div>
+                    <h3>原因分析: 行動別 accuracy</h3>
+                    <p>`naziou` は combined でも 0.115 と低い。ラベル境界や手元の見え方を見直す根拠になる。</p>
+                    <div class="callout">載せる場所: 評価結果の次スライド</div>
+                </article>
+                <article class="next-card">
+                    <div class="badge">C</div>
+                    <h3>補助資料: 同期 diagnostic</h3>
+                    <p>Pose と IMU のピークが揃う図を載せると、同期処理の妥当性を実データで説明できる。</p>
+                    <div class="callout">載せる場所: appendix または同期スライド</div>
+                </article>
+            </div>
+            <footer class="slide-footer">
+                <span>締め: 評価系はつながった。次は失敗クラスの分析と特徴量設計へ進む</span>
+                <span class="page-number">06 / 06</span>
+            </footer>
+        </section>
+    </main>
+</body>
+</html>

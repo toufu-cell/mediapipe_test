@@ -42,7 +42,7 @@ export interface MotionDataPoint {
     positions: Record<JointName, Position3D | null>;
     /** 関節角度（度数法、null=欠損） */
     angles: Record<AngleName, number | null>;
-    /** 擬似加速度（正規化座標/秒^2、null=欠損または計算不可） */
+    /** 擬似加速度（座標単位/秒^2、null=欠損または計算不可） */
     accelerations: Record<JointName, Position3D | null>;
     /** 擬似角速度（度/秒、null=欠損または計算不可） */
     angularVelocities: Record<AngleName, number | null>;
@@ -65,7 +65,7 @@ export interface MotionGraphSettings {
 }
 
 /** 入力ソース */
-export type InputSource = 'camera' | 'videoFile' | 'skeletonPlayer' | 'skeleton3D';
+export type InputSource = 'camera' | 'videoFile' | 'skeletonPlayer' | 'skeleton3D' | 'captureSession';
 
 /** 関節名からランドマークindexへのマッピング */
 export const JOINT_LANDMARK_MAP: Record<JointName, number> = {

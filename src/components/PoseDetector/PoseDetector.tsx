@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useCameraStream } from './useCameraStream';
 import { useMediaPipe } from './useMediaPipe';
 import { PoseCanvas, type PoseCanvasHandle } from './PoseCanvas';
+import { FpsDisplay } from '../common/FpsDisplay';
+import { useFps } from '../../hooks/useFps';
 import type { PoseSettings, DetectionResult } from '../../types/pose';
 import { DEFAULT_POSE_SETTINGS } from '../../types/pose';
 import { drawDetectionResults } from '../../utils/drawPose';
@@ -26,6 +28,7 @@ export function PoseDetector({
 }: PoseDetectorProps) {
     const { videoRef, stream, error: cameraError, isLoading: cameraLoading, startCamera } = useCameraStream();
     const { isLoading: mediapipeLoading, error: mediapipeError, detect } = useMediaPipe();
+    const { fps, tick: fpsTick } = useFps();
     const [detectionResults, setDetectionResults] = useState<DetectionResult[]>([]);
     const animationFrameRef = useRef<number | undefined>(undefined);
     const lastTimestampRef = useRef<number>(0);
@@ -74,6 +77,7 @@ export function PoseDetector({
             setDetectionResults(results);
             detectionResultsRef.current = results;
             lastTimestampRef.current = timestamp;
+            fpsTick();
 
             // モーション解析用コールバック
             onDetectionRef.current?.(results, timestamp);
@@ -96,7 +100,7 @@ export function PoseDetector({
         }
 
         animationFrameRef.current = requestAnimationFrame(runDetection);
-    }, [detect, videoRef, settings]);
+    }, [detect, videoRef, settings, fpsTick]);
 
     useEffect(() => {
         if (stream && !mediapipeLoading && !mediapipeError) {
@@ -134,7 +138,10 @@ export function PoseDetector({
                 </div>
             )}
 
-            <div className="video-container">
+            <div className="video-container" style={{ position: 'relative' }}>
+                <div className="pose-detector-fps">
+                    <FpsDisplay fps={fps} label="検出 FPS" />
+                </div>
                 <video
                     ref={videoRef}
                     width={VIDEO_WIDTH}

@@ -55,7 +55,7 @@ export function SkeletonPlayer() {
                 {player.loadedData && (
                     <span className="skeleton-player-info">
                         {player.totalFrames} フレーム / {formatTime(player.totalDurationMs)}
-                        {' '}({player.loadedData.metadata.estimatedFps.toFixed(1)} fps)
+                        {' '}(データ FPS: {player.loadedData.metadata.estimatedFps.toFixed(1)})
                     </span>
                 )}
             </div>

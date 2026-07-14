@@ -6,10 +6,13 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', sans-serif;
     background-color: #1a1a2e;
     color: #eee;
     min-height: 100vh;
+    line-height: 1.7;
+    line-break: strict;
+    overflow-wrap: break-word;
 }
 
 /* App Layout */
@@ -348,6 +351,7 @@ body {
     gap: 0;
     justify-content: center;
     margin-bottom: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .mode-button {
@@ -377,6 +381,229 @@ body {
 .mode-button:hover:not(.active) {
     background-color: #1a2a4e;
     color: #ccc;
+}
+
+/* Capture Session */
+.capture-session {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.capture-session-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem;
+    background-color: #16213e;
+    border: 1px solid #243b53;
+    border-radius: 8px;
+}
+
+.capture-session-header h2 {
+    font-size: 1.25rem;
+    color: #10B981;
+    margin-bottom: 0.25rem;
+}
+
+.capture-session-header p {
+    color: #b8c7d9;
+    font-size: 0.9rem;
+}
+
+.capture-status {
+    flex: 0 0 auto;
+    min-width: 110px;
+    padding: 0.35rem 0.65rem;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #d7f7f2;
+    border: 1px solid #33566b;
+    border-radius: 999px;
+    background-color: #0f3460;
+}
+
+.capture-status-recording {
+    color: #081019;
+    background-color: #10B981;
+    border-color: #10B981;
+}
+
+.capture-status-stopped {
+    color: #f8d7da;
+    background-color: rgba(239, 68, 68, 0.12);
+    border-color: #EF4444;
+}
+
+.capture-session-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.capture-panel {
+    padding: 1rem;
+    background-color: #16213e;
+    border: 1px solid #243b53;
+    border-radius: 8px;
+}
+
+.capture-panel h3 {
+    font-size: 0.95rem;
+    color: #0D9488;
+    margin-bottom: 0.75rem;
+}
+
+.capture-session-summary dl {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.capture-session-summary dl div {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 0.75rem;
+}
+
+.capture-session-summary dt {
+    color: #8fa3b8;
+    font-size: 0.8rem;
+}
+
+.capture-session-summary dd {
+    color: #f1f5f9;
+    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-size: 0.82rem;
+}
+
+.capture-command-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+
+.capture-primary-button {
+    background-color: #0D9488;
+    border-color: #10B981;
+}
+
+.capture-device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.capture-host-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-bottom: 0.85rem;
+}
+
+.capture-host-field span {
+    color: #8fa3b8;
+    font-size: 0.78rem;
+}
+
+.capture-host-field input {
+    width: 100%;
+    min-height: 38px;
+    padding: 0.55rem 0.7rem;
+    color: #eef8f6;
+    background-color: #081019;
+    border: 1px solid #33566b;
+    border-radius: 8px;
+    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-size: 0.9rem;
+}
+
+.capture-host-field input:focus {
+    outline: none;
+    border-color: #10B981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.capture-device-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background-color: #1a1a2e;
+    border-radius: 8px;
+}
+
+.capture-device-row strong,
+.capture-device-row span {
+    display: block;
+}
+
+.capture-device-row strong {
+    color: #eef8f6;
+    font-size: 0.9rem;
+}
+
+.capture-device-row span {
+    color: #8fa3b8;
+    font-size: 0.78rem;
+}
+
+.capture-device-dot {
+    width: 10px;
+    height: 10px;
+    margin-top: 0.35rem;
+    border-radius: 50%;
+}
+
+.capture-device-dot-waiting {
+    background-color: #F59E0B;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+}
+
+.capture-device-dot-ready,
+.capture-device-dot-sent {
+    background-color: #10B981;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12);
+}
+
+.capture-device-dot-idle {
+    background-color: #64748B;
+    box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.12);
+}
+
+.capture-device-dot-sending {
+    background-color: #F59E0B;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+}
+
+.capture-device-dot-error {
+    background-color: #EF4444;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+}
+
+.capture-payload {
+    max-height: 300px;
+    overflow: auto;
+    padding: 0.85rem;
+    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: #d7f7f2;
+    background-color: #081019;
+    border: 1px solid #243b53;
+    border-radius: 8px;
+}
+
+.capture-sync-panel ol {
+    padding-left: 1.25rem;
+    color: #c7d7e6;
+    font-size: 0.9rem;
+}
+
+.capture-sync-panel li + li {
+    margin-top: 0.35rem;
 }
 
 /* Video File Section */
@@ -819,6 +1046,26 @@ body {
 
 .player-checkbox:has(input:disabled) {
     opacity: 0.5;
+}
+
+/* FPS Display */
+.fps-display {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    color: #0D9488;
+    background-color: rgba(13, 148, 136, 0.12);
+    border: 1px solid rgba(13, 148, 136, 0.3);
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.pose-detector-fps {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 10;
 }
 
 /* Responsive */

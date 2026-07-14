@@ -408,7 +408,7 @@ export function MotionGraph({ data, settings, updateCount }: MotionGraphProps) {
                     title="擬似加速度"
                     data={accelData}
                     seriesConfig={accelSeries}
-                    yLabel="加速度 (norm, 正規化座標/s²)"
+                    yLabel="加速度 (norm/s²)"
                 />
             )}
             {visibleMetrics.angularVelocities && (

@@ -46,10 +46,28 @@ python/output/*
 !python/data/labels.csv
 !python/output/.gitkeep
 python/.venv/
+python/.venv*/
 python/.cache/
 python/.tmp/
 python/.pytest_cache/
+python/tests/.mplconfig/*.json
 python/tests/fixtures/main_data/output/*
 !python/tests/fixtures/main_data/output/.gitkeep
 __pycache__/
 *.pyc
+
+# Local Python environments
+.venv*/
+
+# Xcode / Swift build and per-user state
+ios/.build/
+ios/.swiftpm/
+ios/build/
+ios/ios/build/
+**/xcuserdata/
+*.xcuserstate
+
+# Local analysis and test artifacts
+.understand-anything/
+.codex_tmp_*
+test-results/

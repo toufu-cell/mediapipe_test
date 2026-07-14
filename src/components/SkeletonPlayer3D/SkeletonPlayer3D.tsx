@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SPEED_OPTIONS, useSkeletonPlayer3D } from '../../hooks/useSkeletonPlayer3D';
 import type { PlaybackSpeed } from '../../hooks/useSkeletonPlayer3D';
+import { useMotionData3D } from '../../hooks/useMotionData3D';
 import { SkeletonPlayer3DCanvas } from './SkeletonPlayer3DCanvas';
+import { MotionGraph } from '../MotionGraph/MotionGraph';
+import { MotionGraphControls } from '../MotionGraph/MotionGraphControls';
 
 const BODY_FILE_NAME = 'mediapipe_body_3d_xyz.csv';
 const LEFT_HAND_FILE_NAME = 'mediapipe_left_hand_3d_xyz.csv';
@@ -42,9 +45,11 @@ function useDirectoryInputRef() {
 
 export function SkeletonPlayer3D() {
     const player = useSkeletonPlayer3D();
+    const motionData = useMotionData3D();
     const [selectionError, setSelectionError] = useState<string | null>(null);
     const [showLeftHand, setShowLeftHand] = useState(true);
     const [showRightHand, setShowRightHand] = useState(true);
+    const [showMotionControls, setShowMotionControls] = useState(false);
     const { inputRef: directoryInputRef, setInputRef: setDirectoryInputRef } = useDirectoryInputRef();
     const filesInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,6 +61,22 @@ export function SkeletonPlayer3D() {
         setShowLeftHand(player.loadedData.metadata.hasLeftHand);
         setShowRightHand(player.loadedData.metadata.hasRightHand);
     }, [player.loadedData]);
+
+    // データロード完了時にモーション解析を一括計算
+    useEffect(() => {
+        if (player.loadedData) {
+            motionData.computeAll(player.loadedData);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [player.loadedData]);
+
+    // 再生位置の変更に応じてグラフの表示窓を更新
+    useEffect(() => {
+        if (motionData.isComputed) {
+            motionData.updatePlaybackPosition(player.currentTimeMs);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [player.currentTimeMs, motionData.isComputed, motionData.settings.timeWindow]);
 
     const loadSelectedFiles = useCallback(async (files: File[]) => {
         const bodyFile = findMatchingFile(files, BODY_FILE_NAME);
@@ -69,8 +90,9 @@ export function SkeletonPlayer3D() {
         }
 
         setSelectionError(null);
+        motionData.clearBuffers();
         await player.loadFiles(bodyFile, leftHandFile, rightHandFile, paramsFile);
-    }, [player]);
+    }, [player, motionData]);
 
     const handleDirectoryChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files ? Array.from(event.target.files) : [];
@@ -139,7 +161,7 @@ export function SkeletonPlayer3D() {
                 {player.loadedData && (
                     <span className="skeleton-player-info">
                         {player.totalFrames} フレーム / {formatTime(player.totalDurationMs)}
-                        {' '}({player.loadedData.metadata.fps.toFixed(1)} fps)
+                        {' '}(データ FPS: {player.loadedData.metadata.fps.toFixed(1)})
                     </span>
                 )}
             </div>
@@ -240,6 +262,37 @@ export function SkeletonPlayer3D() {
                             </span>
                         </div>
                     </div>
+
+                    {/* モーション解析セクション */}
+                    {motionData.isComputed && (
+                        <div className="motion-section">
+                            <div className="motion-section-header">
+                                <h2>モーション解析</h2>
+                                <button
+                                    className="settings-toggle"
+                                    onClick={() => setShowMotionControls(!showMotionControls)}
+                                >
+                                    <span className="toggle-icon">
+                                        {showMotionControls ? '▼' : '▶'}
+                                    </span>
+                                    グラフ設定
+                                </button>
+                            </div>
+
+                            {showMotionControls && (
+                                <MotionGraphControls
+                                    settings={motionData.settings}
+                                    onChange={motionData.setSettings}
+                                />
+                            )}
+
+                            <MotionGraph
+                                data={motionData.displayData}
+                                settings={motionData.settings}
+                                updateCount={motionData.updateCount}
+                            />
+                        </div>
+                    )}
                 </>
             )}
         </div>

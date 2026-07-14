@@ -109,45 +109,50 @@ function accumulateBoundingBox(box: BoundingBox3D | null, points: Point3D[]): Bo
     return nextBox;
 }
 
+const FPS_KEYS = ['framerate', 'frameRate', 'fps', 'sampling_rate'];
+
+/**
+ * オブジェクトツリーからFPS値を探す。
+ * FPS関連キー（framerate, fps 等）を全階層で優先的に探し、
+ * 無関係な数値（num_processes 等）を誤って拾わないようにする。
+ */
 function findFpsValue(value: unknown): number | null {
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-        return value;
-    }
-
-    if (typeof value === 'string') {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed) && parsed > 0) {
-            return parsed;
-        }
-    }
-
-    if (Array.isArray(value)) {
-        for (const item of value) {
-            const fps = findFpsValue(item);
-            if (fps !== null) {
-                return fps;
-            }
-        }
+    if (!value || typeof value !== 'object') {
         return null;
     }
 
-    if (value && typeof value === 'object') {
-        const record = value as Record<string, unknown>;
-        const directKeys = ['framerate', 'frameRate', 'fps'];
+    // BFS: まず全階層で FPS_KEYS に該当するキーだけを探す
+    const queue: unknown[] = [value];
 
-        for (const key of directKeys) {
-            if (key in record) {
-                const fps = findFpsValue(record[key]);
-                if (fps !== null) {
-                    return fps;
+    while (queue.length > 0) {
+        const current = queue.shift();
+
+        if (Array.isArray(current)) {
+            for (const item of current) {
+                if (item && typeof item === 'object') {
+                    queue.push(item);
                 }
             }
+            continue;
         }
 
-        for (const nestedValue of Object.values(record)) {
-            const fps = findFpsValue(nestedValue);
-            if (fps !== null) {
-                return fps;
+        if (current && typeof current === 'object') {
+            const record = current as Record<string, unknown>;
+
+            for (const key of FPS_KEYS) {
+                if (key in record) {
+                    const raw = record[key];
+                    const num = typeof raw === 'string' ? Number(raw) : raw;
+                    if (typeof num === 'number' && Number.isFinite(num) && num > 0) {
+                        return num;
+                    }
+                }
+            }
+
+            for (const nested of Object.values(record)) {
+                if (nested && typeof nested === 'object') {
+                    queue.push(nested);
+                }
             }
         }
     }

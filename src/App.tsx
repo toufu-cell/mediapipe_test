@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useRef, useCallback, useEffect } from 'react';
+import { lazy, Suspense, useState, useRef, useCallback } from 'react';
 import { PoseDetector } from './components/PoseDetector/PoseDetector';
 import { type PoseCanvasHandle } from './components/PoseDetector/PoseCanvas';
 import { ScreenshotButton } from './components/Controls/ScreenshotButton';
@@ -6,6 +6,7 @@ import { RecordButton } from './components/Controls/RecordButton';
 import { SettingsPanel } from './components/Controls/SettingsPanel';
 import { VideoFileAnalyzer } from './components/VideoFileAnalyzer';
 import { SkeletonPlayer } from './components/SkeletonPlayer/SkeletonPlayer';
+import { CaptureSession } from './components/CaptureSession/CaptureSession';
 import { MotionGraph } from './components/MotionGraph/MotionGraph';
 import { MotionGraphControls } from './components/MotionGraph/MotionGraphControls';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -29,6 +30,10 @@ const SkeletonPlayer3D = lazy(async () => {
  * Safariブラウザかどうかを判定
  */
 function isSafari(): boolean {
+    if (typeof navigator === 'undefined') {
+        return false;
+    }
+
     const ua = navigator.userAgent.toLowerCase();
     return ua.includes('safari') && !ua.includes('chrome') && !ua.includes('chromium');
 }
@@ -52,7 +57,7 @@ function App() {
     const { takeScreenshot } = useScreenshot();
     const recorder = useRecorder();
     const motionData = useMotionData(motionSettings.timeWindow);
-    const { exportCSV, exportJSON, exportSkeletonJSON } = useMotionExport();
+    const { exportCSV, exportJSON, exportSkeletonJSON, exportSkeletonCSV } = useMotionExport();
 
     // 骨格フレーム蓄積（全33点ランドマーク）
     const skeletonFramesRef = useRef<SkeletonFrame[]>([]);
@@ -61,12 +66,8 @@ function App() {
     // キャプチャ時の解像度（動的取得用）
     const captureResolutionRef = useRef({ width: 640, height: 480 });
 
-    const [browserSupported, setBrowserSupported] = useState(true);
-    const isPlaybackMode = inputSource === 'skeletonPlayer' || inputSource === 'skeleton3D';
-
-    useEffect(() => {
-        setBrowserSupported(isSupportedBrowser());
-    }, []);
+    const [browserSupported] = useState(isSupportedBrowser);
+    const isAnalysisMode = inputSource === 'camera' || inputSource === 'videoFile';
 
     const handleCanvasReady = useCallback((handle: PoseCanvasHandle) => {
         canvasHandleRef.current = handle;
@@ -161,6 +162,17 @@ function App() {
         });
     }, [exportSkeletonJSON, inputSource]);
 
+    const handleExportSkeletonCSV = useCallback(() => {
+        const source: SkeletonSource = inputSource === 'camera' ? 'camera' : 'videoFile';
+        exportSkeletonCSV({
+            frames: skeletonFramesRef.current,
+            source,
+            sourceWidth: captureResolutionRef.current.width,
+            sourceHeight: captureResolutionRef.current.height,
+            mirrored: inputSource === 'camera',
+        });
+    }, [exportSkeletonCSV, inputSource]);
+
     if (!browserSupported) {
         return (
             <div className="app unsupported-browser">
@@ -216,6 +228,12 @@ function App() {
                         >
                             3D再生
                         </button>
+                        <button
+                            className={`mode-button ${inputSource === 'captureSession' ? 'active' : ''}`}
+                            onClick={() => handleInputSourceChange('captureSession')}
+                        >
+                            Capture Session
+                        </button>
                     </div>
 
                     {/* カメラモード */}
@@ -240,6 +258,7 @@ function App() {
                             processDetection={motionData.processDetection}
                             onDetection={handleDetection}
                             onVideoResolution={handleVideoResolution}
+                            settings={settings}
                         />
                     )}
 
@@ -254,8 +273,12 @@ function App() {
                         </Suspense>
                     )}
 
-                    {/* コントロールセクション（再生モード以外） */}
-                    {!isPlaybackMode && (
+                    {inputSource === 'captureSession' && (
+                        <CaptureSession />
+                    )}
+
+                    {/* コントロールセクション（解析モードのみ） */}
+                    {isAnalysisMode && (
                     <div className="controls-section">
                         {inputSource === 'camera' && (
                             <div className="button-group">
@@ -302,6 +325,14 @@ function App() {
                                 <span className="button-icon">&#128190;</span>
                                 骨格JSON エクスポート
                             </button>
+                            <button
+                                className="control-button export-button"
+                                onClick={handleExportSkeletonCSV}
+                                disabled={skeletonFramesRef.current.length === 0}
+                            >
+                                <span className="button-icon">&#128190;</span>
+                                33ランドマークCSV
+                            </button>
                         </div>
 
                         <SettingsPanel
@@ -311,8 +342,8 @@ function App() {
                     </div>
                     )}
 
-                    {/* モーショングラフ（再生モード以外） */}
-                    {!isPlaybackMode && (
+                    {/* モーショングラフ（解析モードのみ） */}
+                    {isAnalysisMode && (
                     <div className="motion-section">
                         <div className="motion-section-header">
                             <h2>モーション解析</h2>

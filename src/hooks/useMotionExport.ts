@@ -44,10 +44,24 @@ interface ExportSkeletonOptions {
     mirrored: boolean;
 }
 
+/** MediaPipe Pose 33ランドマーク名（インデックス順） */
+const POSE_LANDMARK_NAMES = [
+    'nose', 'leftEyeInner', 'leftEye', 'leftEyeOuter',
+    'rightEyeInner', 'rightEye', 'rightEyeOuter',
+    'leftEar', 'rightEar', 'mouthLeft', 'mouthRight',
+    'leftShoulder', 'rightShoulder', 'leftElbow', 'rightElbow',
+    'leftWrist', 'rightWrist', 'leftPinky', 'rightPinky',
+    'leftIndex', 'rightIndex', 'leftThumb', 'rightThumb',
+    'leftHip', 'rightHip', 'leftKnee', 'rightKnee',
+    'leftAnkle', 'rightAnkle', 'leftHeel', 'rightHeel',
+    'leftFootIndex', 'rightFootIndex',
+] as const;
+
 interface UseMotionExportReturn {
     exportCSV: (data: MotionDataPoint[]) => void;
     exportJSON: (data: MotionDataPoint[], source: InputSource) => void;
     exportSkeletonJSON: (options: ExportSkeletonOptions) => void;
+    exportSkeletonCSV: (options: ExportSkeletonOptions) => void;
 }
 
 export function useMotionExport(): UseMotionExportReturn {
@@ -198,5 +212,49 @@ export function useMotionExport(): UseMotionExportReturn {
         downloadBlob(blob, `skeleton_data_${getTimestamp()}.json`);
     }, []);
 
-    return { exportCSV, exportJSON, exportSkeletonJSON };
+    const exportSkeletonCSV = useCallback((options: ExportSkeletonOptions) => {
+        const { frames } = options;
+        if (frames.length === 0) return;
+
+        const exportFrames = frames.length > MAX_BUFFER_FRAMES
+            ? frames.slice(frames.length - MAX_BUFFER_FRAMES)
+            : frames;
+
+        // ヘッダー: timestamp_ms, frame_index, 33ランドマーク×(x,y,z,visibility) = 134列
+        const headers: string[] = ['timestamp_ms', 'frame_index'];
+        for (const name of POSE_LANDMARK_NAMES) {
+            headers.push(`${name}_x`, `${name}_y`, `${name}_z`, `${name}_visibility`);
+        }
+
+        const rows = exportFrames.map(frame => {
+            const values: string[] = [
+                String(frame.timestampMs),
+                String(frame.frameIndex),
+            ];
+
+            if (frame.landmarks) {
+                for (let i = 0; i < POSE_LANDMARK_NAMES.length; i++) {
+                    const lm = frame.landmarks[i];
+                    if (lm) {
+                        values.push(String(lm.x), String(lm.y), String(lm.z), String(lm.visibility));
+                    } else {
+                        values.push('', '', '', '');
+                    }
+                }
+            } else {
+                // 検出失敗フレーム: 全て空
+                for (let i = 0; i < POSE_LANDMARK_NAMES.length; i++) {
+                    values.push('', '', '', '');
+                }
+            }
+
+            return values.join(',');
+        });
+
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        downloadBlob(blob, `skeleton_33landmarks_${getTimestamp()}.csv`);
+    }, []);
+
+    return { exportCSV, exportJSON, exportSkeletonJSON, exportSkeletonCSV };
 }

@@ -178,24 +178,40 @@ export function useMediaPipe(): UseMediaPipeReturn {
     );
 
     /**
-     * PoseLandmarkerをclose→再作成してtracking stateをリセット
-     * 動画ファイルのseekオフライン解析前に呼び出す
+     * 動画ファイル解析前に Pose/Hand の両 Landmarker を再生成し、
+     * timestamp/tracking state をリセットする。
      */
     const resetPoseLandmarker = useCallback(async () => {
         if (!visionRef.current) return;
 
         poseLandmarkerRef.current?.close();
-        poseLandmarkerRef.current = await PoseLandmarker.createFromOptions(visionRef.current, {
-            baseOptions: {
-                modelAssetPath: MODEL_PATH,
-                delegate: DELEGATE,
-            },
-            runningMode: 'VIDEO',
-            numPoses: 1,
-            minPoseDetectionConfidence: 0.5,
-            minPosePresenceConfidence: 0.5,
-            minTrackingConfidence: 0.5,
-        });
+        handLandmarkerRef.current?.close();
+        const [poseLandmarker, handLandmarker] = await Promise.all([
+            PoseLandmarker.createFromOptions(visionRef.current, {
+                baseOptions: {
+                    modelAssetPath: MODEL_PATH,
+                    delegate: DELEGATE,
+                },
+                runningMode: 'VIDEO',
+                numPoses: 1,
+                minPoseDetectionConfidence: 0.5,
+                minPosePresenceConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+            }),
+            HandLandmarker.createFromOptions(visionRef.current, {
+                baseOptions: {
+                    modelAssetPath: HAND_MODEL_PATH,
+                    delegate: DELEGATE,
+                },
+                runningMode: 'VIDEO',
+                numHands: 2,
+                minHandDetectionConfidence: 0.5,
+                minHandPresenceConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+            }),
+        ]);
+        poseLandmarkerRef.current = poseLandmarker;
+        handLandmarkerRef.current = handLandmarker;
     }, []);
 
     return {

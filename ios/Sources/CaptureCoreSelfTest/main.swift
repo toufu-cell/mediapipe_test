@@ -64,6 +64,22 @@ func testAuthenticatedCommandRequiresMatchingToken() throws {
     }
 }
 
+func testCommandLineBufferEnforcesRequestLimit() throws {
+    var buffer = CaptureCommandLineBuffer(maxBytes: 8)
+    let partial = try buffer.append(Data("1234".utf8))
+    try expect(partial == nil, "partial command should wait")
+    let line = try buffer.append(Data("567\n".utf8))
+    try expect(line == "1234567", "framed command mismatch")
+
+    var oversized = CaptureCommandLineBuffer(maxBytes: 8)
+    do {
+        _ = try oversized.append(Data("12345678".utf8))
+        throw SelfTestError.assertionFailed("Command without newline at the byte limit should fail")
+    } catch CaptureCommandLineBufferError.requestTooLarge {
+        // Expected.
+    }
+}
+
 func testScheduledDelayUsesFutureStartAt() throws {
     let command = StartCaptureCommand(
         sessionId: "capture_future",
@@ -147,6 +163,7 @@ func testWatchCommandDeliveryStateRejectsStartAfterUnknownStop() throws {
 let tests: [(String, () throws -> Void)] = [
     ("decode start command from newline-delimited JSON", testDecodeStartCommandFromNewlineDelimitedJson),
     ("authenticated command requires matching token", testAuthenticatedCommandRequiresMatchingToken),
+    ("command line buffer enforces request limit", testCommandLineBufferEnforcesRequestLimit),
     ("scheduled delay uses future startAt", testScheduledDelayUsesFutureStartAt),
     ("scheduled delay clamps past startAt to zero", testScheduledDelayClampsPastStartAtToZero),
     ("IMU CSV writer formats samples", testIMUCSVWriterFormatsSamples),

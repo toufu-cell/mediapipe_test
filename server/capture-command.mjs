@@ -59,11 +59,20 @@ function parseResponseLine(line) {
         return null;
     }
 
+    let response;
     try {
-        return JSON.parse(trimmed);
+        response = JSON.parse(trimmed);
     } catch {
         throw new Error('iPhone response is not valid JSON');
     }
+
+    if (!isPlainObject(response) || response.ok !== true) {
+        const reason = isPlainObject(response) && typeof response.error === 'string'
+            ? `: ${response.error}`
+            : '';
+        throw new Error(`iPhone recorder rejected command${reason}`);
+    }
+    return response;
 }
 
 export function sendCaptureCommand({
@@ -124,7 +133,11 @@ export function sendCaptureCommand({
 
         socket.on('end', () => {
             try {
-                settle(resolve, parseResponseLine(responseBuffer) ?? { ok: true });
+                const response = parseResponseLine(responseBuffer);
+                if (response === null) {
+                    throw new Error('iPhone recorder ended without a response');
+                }
+                settle(resolve, response);
             } catch (error) {
                 settle(reject, error);
             }
@@ -210,7 +223,11 @@ export function createCaptureCommandMiddleware() {
             writeJson(res, 200, { ok: true, response, host, port });
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Capture command failed';
-            const statusCode = message.includes('Timed out') ? 504 : 400;
+            const statusCode = message.includes('Timed out')
+                ? 504
+                : message.startsWith('iPhone ')
+                    ? 502
+                    : 400;
             writeJson(res, statusCode, { ok: false, error: message });
         }
     };

@@ -6,7 +6,7 @@ PC を司令塔にして、iPhone の動画録画と Apple Watch の手首セン
 
 ## MVP Scope
 
-最初の MVP は PC 側の Capture Session 画面とデータ仕様を固定するところまでにする。iPhone / Apple Watch との実通信は次フェーズで実装する。
+最初の MVP は PC 側の Capture Session 画面、iPhone / Apple Watch との実通信、データ仕様を固定する。
 
 MVP に含めるもの:
 
@@ -16,11 +16,10 @@ MVP に含めるもの:
 - `startAt` を現在時刻 + 数秒として扱い、同時開始の前提を明示する。
 - 同期用ジェスチャとして、開始直後に手首を 3 回振る運用を入れる。
 - iPhone 側 MVP の transport は newline-delimited JSON over TCP に固定する。
+- PC と iPhone で pairing token を共有し、16 KiB 以下の認証済み envelope だけを受け付ける。
 
 MVP に含めないもの:
 
-- iPhone への実 WebSocket / HTTP 通信。
-- Apple Watch への実 WatchConnectivity command。
 - 動画ファイルや IMU CSV の自動転送。
 - 自動ピーク検出による同期補正。
 
@@ -31,12 +30,13 @@ MVP に含めないもの:
 - Capture Session を作成する。
 - `sessionId`, `startAt`, `expectedDurationSec` を含む command payload を作る。
 - Start / Stop の状態を管理する。
-- 後続フェーズで iPhone app へ command を送る。
+- localhost の command proxy から iPhone app へ token 付き command を送る。
 - 収録後に動画、Watch IMU CSV、MediaPipe 抽出 CSV を読み込んで比較する。
 
 ### iPhone App
 
-- PC app から newline-delimited JSON over TCP で command を受ける。
+- PC app から newline-delimited JSON over TCP で token 付き envelope を受ける。
+- envelope の pairing tokenと16 KiB上限を検証してからinner commandを実行する。
 - start command 受信後、`startAt` まで待ってから `AVFoundation` で動画録画を開始する。
 - stop command 受信時に録画を停止する。
 - 同じ `sessionId` を Apple Watch app へ渡す。
@@ -49,7 +49,24 @@ MVP に含めないもの:
 - `sessionId` つきの IMU CSV / JSON を作る。
 - 記録後に iPhone へ転送する。
 
-## Command Schema
+## Wire Envelope
+
+PC から iPhone へ送る1行は次の envelope とする。`command` には後述のstart / stop schemaを入れる。
+
+```json
+{
+    "token": "<PAIRING_TOKEN>",
+    "command": {
+        "type": "stop",
+        "sessionId": "capture_20260524_203000",
+        "stopAt": "2026-05-24T20:33:03.000+09:00"
+    }
+}
+```
+
+Pairing tokenはiPhone appが初回生成して端末内に保存する。PC Capture Session画面へ同じtokenを入力し、不一致時はcommandを失敗として表示する。
+
+## Inner Command Schema
 
 ```json
 {

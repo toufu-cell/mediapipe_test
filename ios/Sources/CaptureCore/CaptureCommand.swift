@@ -76,6 +76,44 @@ public enum AuthenticatedCaptureCommandDecodeError: Error, Equatable {
     case unauthorized
 }
 
+public enum CaptureCommandLineBufferError: Error, Equatable {
+    case invalidUTF8
+    case requestTooLarge
+}
+
+public struct CaptureCommandLineBuffer: Sendable {
+    public let maxBytes: Int
+    private var data = Data()
+
+    public init(maxBytes: Int = 16 * 1024) {
+        precondition(maxBytes > 0)
+        self.maxBytes = maxBytes
+    }
+
+    public var remainingCapacity: Int {
+        max(0, maxBytes - data.count)
+    }
+
+    public mutating func append(_ chunk: Data) throws -> String? {
+        guard data.count + chunk.count <= maxBytes else {
+            throw CaptureCommandLineBufferError.requestTooLarge
+        }
+        data.append(chunk)
+
+        if let newlineIndex = data.firstIndex(of: 0x0A) {
+            guard let line = String(data: data[..<newlineIndex], encoding: .utf8) else {
+                throw CaptureCommandLineBufferError.invalidUTF8
+            }
+            return line
+        }
+
+        if data.count == maxBytes {
+            throw CaptureCommandLineBufferError.requestTooLarge
+        }
+        return nil
+    }
+}
+
 private struct CommandEnvelope: Decodable {
     let type: String
 }

@@ -6,7 +6,7 @@
         "dev": "vite",
         "build": "tsc && vite build",
         "preview": "vite preview",
-        "test:api": "node --test ./tests/capture-command-api.test.mjs",
+        "test:api": "playwright test tests/capture-command-api.spec.mjs",
         "test:e2e": "playwright test"
     },
   "keywords": [],

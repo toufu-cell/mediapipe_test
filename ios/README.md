@@ -6,26 +6,29 @@ This folder contains the first iPhone-side scaffold for the capture system.
 
 - `CaptureCore` is a Swift Package target that can be checked in this environment.
 - `IPhoneRecorderApp/` contains SwiftUI / AVFoundation / Network / WatchConnectivity source files for an iOS app.
-- This machine only has Command Line Tools. `xcodebuild` and iOS Simulator are not available, so the iOS app target itself has not been built here.
+- The Swift self-test and code-signing-disabled simulator build have been verified for both iPhone and Watch targets.
 
 ## Transport
 
 MVP transport is fixed as newline-delimited JSON over TCP.
 
 - iPhone listens on TCP port `8765`.
-- PC sends one JSON command per line.
+- PC sends one token-authenticated JSON envelope per connection and then closes it.
+- The iPhone rejects envelopes larger than 16 KiB or with a mismatched pairing token.
 - The iPhone responds with one JSON line, for example `{"ok":true}`.
 
-Example start command:
+The iPhone app generates a persistent pairing token. Enter the token shown in the iPhone app into the PC Capture Session screen before sending a command.
+
+Example start envelope:
 
 ```json
-{"type":"start","sessionId":"capture_20260524_203000","startAt":"2026-05-24T20:30:03.000+09:00","expectedDurationSec":180,"syncGesture":"wrist_shake_3_times","video":{"device":"iphone","filename":"capture_20260524_203000.mov"},"watch":{"device":"apple_watch","sampleRateHz":50,"filename":"capture_20260524_203000_wrist_imu.csv"}}
+{"token":"<PAIRING_TOKEN>","command":{"type":"start","sessionId":"capture_20260524_203000","startAt":"2026-05-24T20:30:03.000+09:00","expectedDurationSec":180,"syncGesture":"wrist_shake_3_times","video":{"device":"iphone","filename":"capture_20260524_203000.mov"},"watch":{"device":"apple_watch","sampleRateHz":50,"filename":"capture_20260524_203000_wrist_imu.csv"}}}
 ```
 
-Example stop command:
+Example stop envelope:
 
 ```json
-{"type":"stop","sessionId":"capture_20260524_203000","stopAt":"2026-05-24T20:33:03.000+09:00"}
+{"token":"<PAIRING_TOKEN>","command":{"type":"stop","sessionId":"capture_20260524_203000","stopAt":"2026-05-24T20:33:03.000+09:00"}}
 ```
 
 ## Timing Contract

@@ -50,11 +50,12 @@ final class CaptureCommandServer: @unchecked Sendable {
 
     private func handle(_ connection: NWConnection) {
         connection.start(queue: queue)
-        receive(on: connection, buffer: "")
+        receive(on: connection, buffer: CaptureCommandLineBuffer())
     }
 
-    private func receive(on connection: NWConnection, buffer: String) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, isComplete, error in
+    private func receive(on connection: NWConnection, buffer: CaptureCommandLineBuffer) {
+        let maximumLength = max(1, min(4096, buffer.remainingCapacity))
+        connection.receive(minimumIncompleteLength: 1, maximumLength: maximumLength) { [weak self] data, _, isComplete, error in
             guard let self else {
                 return
             }
@@ -65,23 +66,25 @@ final class CaptureCommandServer: @unchecked Sendable {
             }
 
             var nextBuffer = buffer
-            if let data, let chunk = String(data: data, encoding: .utf8) {
-                nextBuffer += chunk
-                let lines = nextBuffer.split(separator: "\n", omittingEmptySubsequences: false)
-                let hasTrailingNewline = nextBuffer.hasSuffix("\n")
-                let completeLines = hasTrailingNewline ? lines : lines.dropLast()
-                nextBuffer = hasTrailingNewline ? "" : String(lines.last ?? "")
-
-                for line in completeLines {
-                    let lineText = String(line)
-                    if !lineText.trimmingCharacters(in: .whitespaces).isEmpty {
-                        self.handleLine(lineText, on: connection)
+            do {
+                if let data, let line = try nextBuffer.append(data) {
+                    if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                        self.sendResponse(["ok": false, "error": "Empty command"], on: connection)
+                    } else {
+                        self.handleLine(line, on: connection)
                     }
+                    return
                 }
+            } catch {
+                self.sendResponse(["ok": false, "error": "\(error)"], on: connection)
+                return
             }
 
             if isComplete {
-                connection.cancel()
+                self.sendResponse(
+                    ["ok": false, "error": "Connection ended before newline-delimited command"],
+                    on: connection
+                )
             } else {
                 self.receive(on: connection, buffer: nextBuffer)
             }
@@ -108,6 +111,8 @@ final class CaptureCommandServer: @unchecked Sendable {
         }
         var lineData = data
         lineData.append(0x0A)
-        connection.send(content: lineData, completion: .contentProcessed { _ in })
+        connection.send(content: lineData, completion: .contentProcessed { _ in
+            connection.cancel()
+        })
     }
 }

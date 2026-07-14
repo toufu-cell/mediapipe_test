@@ -137,6 +137,29 @@ test('Start and Stop command buttons post capture commands to the local API', as
     expect(Date.parse(stopRequest.command.stopAt)).toBeGreaterThan(clickedAt);
 });
 
+test('rejected iPhone command stays in the ready state and shows the reason', async ({ page }) => {
+    await page.route('**/api/capture-command', async route => {
+        await route.fulfill({
+            status: 502,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                ok: false,
+                error: 'iPhone recorder rejected command: unauthorized',
+            }),
+        });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Capture Session' }).click();
+    await page.getByLabel('iPhone IP').fill('192.168.1.10');
+    await page.getByLabel('Pairing token').fill(TEST_PAIRING_TOKEN);
+    await page.getByRole('button', { name: 'Start command' }).click();
+
+    await expect(page.getByText('iPhone recorder rejected command: unauthorized')).toBeVisible();
+    await expect(page.getByText('Ready', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Stop command' })).toBeDisabled();
+});
+
 test('New session refreshes the session ID for the next capture', async ({ page }) => {
     const requests: unknown[] = [];
 

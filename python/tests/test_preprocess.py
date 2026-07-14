@@ -9,6 +9,7 @@ from modules.preprocess import (
     load_motion_source,
     preprocess_eval,
     preprocess_train,
+    select_feature_columns,
     split_by_label,
 )
 
@@ -123,3 +124,77 @@ def test_preprocess_eval_full_sequence() -> None:
     train_features = preprocess_train(labeled, window_size_ms=2000, step_size_ms=500)
     assert len(eval_features) > 0
     assert len(eval_features) >= len(train_features)
+
+
+def test_preprocess_eval_ignores_non_numeric_columns() -> None:
+    df = make_motion_df()
+    df["imu_session_id"] = "capture_1"
+    df["source"] = "watch"
+    df["imu_timestamp_ms"] = np.arange(100000, 100000 + len(df))
+    df["imu_elapsed_ms"] = df["timestamp_ms"] + 100
+    df["aligned_imu_time_ms"] = df["timestamp_ms"] + 50
+    df["imu_gyro_norm"] = np.linspace(0.0, 5.0, len(df))
+    annotations = [{"start_ms": 0, "end_ms": 10000, "label": "walk"}]
+    labeled = assign_labels(
+        df,
+        annotations,
+        other_id=0,
+        label_name_to_id={"walk": 1},
+    )
+
+    eval_features = preprocess_eval(labeled, window_size_ms=2000, step_size_ms=500)
+
+    assert len(eval_features) > 0
+    assert "leftShoulder_x-pos-avg" in eval_features.columns
+    assert "imu_gyro_norm-pos-avg" in eval_features.columns
+    assert not any(column.startswith("imu_session_id-") for column in eval_features.columns)
+    assert not any(column.startswith("source-") for column in eval_features.columns)
+    assert not any(column.startswith("imu_timestamp_ms-") for column in eval_features.columns)
+    assert not any(column.startswith("imu_elapsed_ms-") for column in eval_features.columns)
+    assert not any(column.startswith("aligned_imu_time_ms-") for column in eval_features.columns)
+
+
+def test_select_feature_columns_by_modality() -> None:
+    df = make_motion_df()
+    df["imu_timestamp_ms"] = np.arange(100000, 100000 + len(df))
+    df["imu_elapsed_ms"] = df["timestamp_ms"] + 100
+    df["imu_gyro_norm"] = np.linspace(0.0, 5.0, len(df))
+    df["imu_accel_norm"] = np.linspace(5.0, 10.0, len(df))
+    df["label"] = 1
+
+    combined = select_feature_columns(df, "combined")
+    video = select_feature_columns(df, "video")
+    watch = select_feature_columns(df, "watch")
+
+    assert "leftShoulder_x" in combined
+    assert "imu_gyro_norm" in combined
+    assert "leftShoulder_x" in video
+    assert "imu_gyro_norm" not in video
+    assert "imu_gyro_norm" in watch
+    assert "imu_accel_norm" in watch
+    assert "leftShoulder_x" not in watch
+    assert "imu_timestamp_ms" not in watch
+    assert "imu_elapsed_ms" not in watch
+
+
+def test_preprocess_eval_watch_only_uses_imu_features() -> None:
+    df = make_motion_df()
+    df["imu_gyro_norm"] = np.linspace(0.0, 5.0, len(df))
+    annotations = [{"start_ms": 0, "end_ms": 10000, "label": "walk"}]
+    labeled = assign_labels(
+        df,
+        annotations,
+        other_id=0,
+        label_name_to_id={"walk": 1},
+    )
+
+    eval_features = preprocess_eval(
+        labeled,
+        window_size_ms=2000,
+        step_size_ms=500,
+        modality="watch",
+    )
+
+    assert len(eval_features) > 0
+    assert "imu_gyro_norm-pos-avg" in eval_features.columns
+    assert "leftShoulder_x-pos-avg" not in eval_features.columns

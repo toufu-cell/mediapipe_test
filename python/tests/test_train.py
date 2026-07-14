@@ -22,6 +22,7 @@ def test_train_and_evaluate() -> None:
     result = train_and_evaluate(
         features_df=features_df,
         test_subject="subject-2",
+        class_ids=[0, 1, 2],
         label_names=["other", "walk", "sit"],
     )
 

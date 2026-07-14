@@ -27,7 +27,7 @@ def test_e2e_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(
         main,
         "plot_time_series_comparison",
-        lambda y_test, y_pred, label_names, output_path: plotted_paths.append(Path(output_path)),
+        lambda y_test, y_pred, class_ids, label_names, output_path: plotted_paths.append(Path(output_path)),
     )
     monkeypatch.setattr(
         sys,

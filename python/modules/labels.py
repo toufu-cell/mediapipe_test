@@ -23,5 +23,11 @@ class Labels:
     def names(self) -> list[str]:
         return list(self._id_to_name.values())
 
+    def ids(self) -> list[int]:
+        return list(self._id_to_name.keys())
+
+    def name_to_id_map(self) -> dict[str, int]:
+        return dict(self._name_to_id)
+
     def __len__(self) -> int:
         return len(self._id_to_name)

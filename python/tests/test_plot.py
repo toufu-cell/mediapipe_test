@@ -92,6 +92,7 @@ def test_plot_time_series_comparison(monkeypatch) -> None:
     plot_time_series_comparison(
         np.array([0, 1, 1, 0]),
         np.array([0, 1, 0, 0]),
+        [0, 1],
         ["other", "walk"],
         "time_series.png",
     )

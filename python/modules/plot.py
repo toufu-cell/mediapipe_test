@@ -26,23 +26,34 @@ def plot_confusion_matrix(
 def plot_time_series_comparison(
     y_test: np.ndarray,
     y_pred: np.ndarray,
+    class_ids: list[int],
     label_names: list[str],
     output_path: str,
 ) -> None:
-    """真値と予測の時系列比較をプロットする。"""
+    """真値と予測の時系列比較をプロットする。
+
+    class_ids と label_names は呼び出し側が用意した「fold 内で有効な全クラス」
+    の対応表。tick 位置は class_ids に固定し、fold 間で軸が揃うようにする。
+    """
     import japanize_matplotlib  # noqa: F401
     import matplotlib.pyplot as plt
+
+    if len(class_ids) != len(label_names):
+        raise ValueError(
+            f"class_ids と label_names の長さが一致していません: "
+            f"{len(class_ids)} vs {len(label_names)}"
+        )
 
     fig, axes = plt.subplots(2, 1, figsize=(14, 5), sharex=True)
 
     axes[0].plot(y_test, linewidth=0.5)
     axes[0].set_ylabel("真値")
-    axes[0].set_yticks(range(len(label_names)))
+    axes[0].set_yticks(class_ids)
     axes[0].set_yticklabels(label_names)
 
     axes[1].plot(y_pred, linewidth=0.5, color="orange")
     axes[1].set_ylabel("予測")
-    axes[1].set_yticks(range(len(label_names)))
+    axes[1].set_yticks(class_ids)
     axes[1].set_yticklabels(label_names)
     axes[1].set_xlabel("ウィンドウ番号")
 

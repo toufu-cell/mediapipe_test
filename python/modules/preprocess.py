@@ -7,6 +7,16 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_MODALITIES = ("combined", "video", "watch")
+META_COLUMNS = {
+    "timestamp_ms",
+    "frame_index",
+    "label",
+    "imu_timestamp_ms",
+    "imu_elapsed_ms",
+    "aligned_imu_time_ms",
+}
+
 
 def load_motion_source(path: Path) -> pd.DataFrame:
     """入力アダプタ層。現 MVP では CSV のみ対応する。"""
@@ -65,6 +75,29 @@ def _get_feature_names(columns: pd.Index, suffix: str) -> list[str]:
     return [f"{column}-{suffix}" for column in columns]
 
 
+def select_feature_columns(df: pd.DataFrame, modality: str = "combined") -> list[str]:
+    """学習に使う数値特徴列を modality ごとに選ぶ。"""
+    if modality not in SUPPORTED_MODALITIES:
+        raise ValueError(
+            f"Unsupported modality: {modality} "
+            f"(supported: {', '.join(SUPPORTED_MODALITIES)})"
+        )
+
+    feature_candidates = [column for column in df.columns if column not in META_COLUMNS]
+    numeric_cols = df[feature_candidates].select_dtypes(include=["number"]).columns
+
+    if modality == "watch":
+        feature_cols = [column for column in numeric_cols if column.startswith("imu_")]
+    elif modality == "video":
+        feature_cols = [column for column in numeric_cols if not column.startswith("imu_")]
+    else:
+        feature_cols = list(numeric_cols)
+
+    if not feature_cols:
+        raise ValueError(f"No numeric feature columns found for modality: {modality}")
+    return feature_cols
+
+
 def _extract_window_features(part_df: pd.DataFrame) -> tuple[pd.Series, list[str]]:
     avg = part_df.mean()
     var = part_df.var()
@@ -89,10 +122,10 @@ def extract_features(
     df: pd.DataFrame,
     window_size_ms: float = 5000,
     step_size_ms: float = 500,
+    modality: str = "combined",
 ) -> pd.DataFrame:
     """スライディングウィンドウで統計特徴量を抽出する。"""
-    meta_cols = ["timestamp_ms", "frame_index", "label"]
-    feature_cols = [column for column in df.columns if column not in meta_cols]
+    feature_cols = select_feature_columns(df, modality)
 
     timestamps = df["timestamp_ms"].to_numpy()
     rows: list[dict] = []
@@ -119,10 +152,11 @@ def preprocess_train(
     labeled_df: pd.DataFrame,
     window_size_ms: float = 5000,
     step_size_ms: float = 500,
+    modality: str = "combined",
 ) -> pd.DataFrame:
     """train 用: 連続ラベル区間のみで特徴量抽出する。"""
     features = [
-        extract_features(segment, window_size_ms, step_size_ms)
+        extract_features(segment, window_size_ms, step_size_ms, modality)
         for segment in split_by_label(labeled_df)
     ]
     features = [feature for feature in features if not feature.empty]
@@ -135,6 +169,7 @@ def preprocess_eval(
     labeled_df: pd.DataFrame,
     window_size_ms: float = 5000,
     step_size_ms: float = 500,
+    modality: str = "combined",
 ) -> pd.DataFrame:
     """eval 用: full sequence をそのまま windowing する。"""
-    return extract_features(labeled_df, window_size_ms, step_size_ms)
+    return extract_features(labeled_df, window_size_ms, step_size_ms, modality)

@@ -3,6 +3,7 @@ import Foundation
 public enum CaptureCommand: Equatable, Sendable {
     case start(StartCaptureCommand)
     case stop(StopCaptureCommand)
+    case watchLive
 }
 
 public struct StartCaptureCommand: Codable, Equatable, Sendable {
@@ -47,10 +48,16 @@ public struct StopCaptureCommand: Codable, Equatable, Sendable {
 public struct CaptureVideoTarget: Codable, Equatable, Sendable {
     public let device: String
     public let filename: String
+    public let enabled: Bool?
 
-    public init(device: String, filename: String) {
+    public init(device: String, filename: String, enabled: Bool? = nil) {
         self.device = device
         self.filename = filename
+        self.enabled = enabled
+    }
+
+    public var isEnabled: Bool {
+        enabled ?? true
     }
 }
 
@@ -58,11 +65,18 @@ public struct CaptureWatchTarget: Codable, Equatable, Sendable {
     public let device: String
     public let sampleRateHz: Int
     public let filename: String
+    public let wristSide: String?
 
-    public init(device: String, sampleRateHz: Int, filename: String) {
+    public init(
+        device: String,
+        sampleRateHz: Int,
+        filename: String,
+        wristSide: String? = nil
+    ) {
         self.device = device
         self.sampleRateHz = sampleRateHz
         self.filename = filename
+        self.wristSide = wristSide
     }
 }
 
@@ -146,6 +160,8 @@ public enum CaptureCommandLineDecoder {
         let envelope = try decoder.decode(CommandEnvelope.self, from: data)
 
         switch envelope.type {
+        case "watch-live":
+            return .watchLive
         case "start":
             let wire = try decoder.decode(StartCommandWire.self, from: data)
             return .start(StartCaptureCommand(
@@ -184,6 +200,12 @@ public enum CaptureCommandLineDecoder {
     }
 }
 
+public enum CaptureCommandDateCodec {
+    public static func encode(_ date: Date) -> String {
+        makeISO8601Formatter(withFractionalSeconds: true).string(from: date)
+    }
+}
+
 public enum AuthenticatedCaptureCommandLineDecoder {
     public static func decodeCommandLine(
         _ line: String,
@@ -199,7 +221,7 @@ public enum AuthenticatedCaptureCommandLineDecoder {
             throw AuthenticatedCaptureCommandDecodeError.invalidEnvelope
         }
 
-        guard expectedToken.utf8.count >= 16,
+        guard expectedToken.utf8.count >= 8,
               tokensMatch(token, expectedToken) else {
             throw AuthenticatedCaptureCommandDecodeError.unauthorized
         }

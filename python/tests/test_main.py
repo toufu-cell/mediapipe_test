@@ -42,9 +42,11 @@ def test_main_pipeline(monkeypatch) -> None:
             "subject-2",
             "-w",
             "0.05",
-            "-s",
-            "0.02",
-        ],
+                "-s",
+                "0.02",
+                "--modality",
+                "combined",
+            ],
     )
 
     main.main()

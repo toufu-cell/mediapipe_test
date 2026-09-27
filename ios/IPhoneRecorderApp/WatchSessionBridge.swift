@@ -1,8 +1,26 @@
 import Foundation
 import WatchConnectivity
 
-final class WatchSessionBridge: NSObject, WCSessionDelegate {
+private enum WatchSessionBridgeError: LocalizedError {
+    case notActivated
+    case rejected(String)
+    case unsupported
+
+    var errorDescription: String? {
+        switch self {
+        case .notActivated:
+            "Watch session is not activated"
+        case let .rejected(message):
+            "Watch rejected command: \(message)"
+        case .unsupported:
+            "WatchConnectivity is unsupported"
+        }
+    }
+}
+
+final class WatchSessionBridge: NSObject, WCSessionDelegate, @unchecked Sendable {
     var onStatusChange: ((String) -> Void)?
+    let liveBuffer = WatchLiveBuffer()
 
     private var session: WCSession? {
         WCSession.isSupported() ? WCSession.default : nil
@@ -19,78 +37,86 @@ final class WatchSessionBridge: NSObject, WCSessionDelegate {
         publishStatus()
     }
 
-    func sendStart(_ command: StartCaptureCommand) {
+    func sendStart(_ command: StartCaptureCommand) async throws {
         let message: [String: Any] = [
             "type": "start",
             "sessionId": command.sessionId,
-            "startAt": ISO8601DateFormatter().string(from: command.startAt),
+            "startAt": CaptureCommandDateCodec.encode(command.startAt),
             "expectedDurationSec": command.expectedDurationSec,
             "syncGesture": command.syncGesture,
             "sampleRateHz": command.watch.sampleRateHz,
             "filename": command.watch.filename,
+            "wristSide": command.watch.wristSide ?? "unknown",
         ]
-        sendCommand(message)
+        try await sendCommand(message)
     }
 
-    func sendStop(_ command: StopCaptureCommand) {
+    func sendStop(_ command: StopCaptureCommand) async throws {
         let message: [String: Any] = [
             "type": "stop",
             "sessionId": command.sessionId,
-            "stopAt": ISO8601DateFormatter().string(from: command.stopAt),
+            "stopAt": CaptureCommandDateCodec.encode(command.stopAt),
         ]
-        sendCommand(message)
+        try await sendCommand(message)
     }
 
-    private func sendCommand(_ message: [String: Any]) {
-        let immediateStatus = send(message)
-        let queueStatus = enqueue(message)
-
-        if let queueStatus {
-            onStatusChange?("\(immediateStatus); \(queueStatus)")
-        } else {
-            onStatusChange?(immediateStatus)
-        }
-    }
-
-    private func send(_ message: [String: Any]) -> String {
+    private func sendCommand(_ message: [String: Any]) async throws {
         guard let session else {
-            return "WatchConnectivity unsupported"
+            throw WatchSessionBridgeError.unsupported
         }
-
         guard session.activationState == .activated else {
-            return "Watch session not activated"
+            throw WatchSessionBridgeError.notActivated
         }
 
-        guard session.isReachable else {
-            return "Watch not reachable"
+        if session.isReachable {
+            do {
+                try await sendAndAwaitSemanticAcceptance(message, on: session)
+                enqueueBestEffort(message, on: session)
+                onStatusChange?("Watch accepted command")
+                return
+            } catch let error as WatchSessionBridgeError {
+                if case .rejected = error {
+                    throw error
+                }
+            } catch {
+                // A reachability race falls through to the durable queue below.
+            }
         }
 
-        session.sendMessage(message, replyHandler: { [weak self] _ in
-            self?.onStatusChange?("Watch message accepted")
-        }, errorHandler: { [weak self] error in
-            self?.onStatusChange?("Watch send failed: \(error.localizedDescription)")
-        })
-        return "Watch message sent"
+        try enqueueDurably(message, on: session)
+        onStatusChange?("Watch command queued")
     }
 
-    private func enqueue(_ message: [String: Any]) -> String? {
-        guard let session else {
-            return nil
+    private func sendAndAwaitSemanticAcceptance(
+        _ message: [String: Any],
+        on session: WCSession
+    ) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            session.sendMessage(message, replyHandler: { reply in
+                if reply["ok"] as? Bool == true {
+                    continuation.resume()
+                } else {
+                    let message = (reply["error"] as? String) ?? "unknown reason"
+                    continuation.resume(throwing: WatchSessionBridgeError.rejected(message))
+                }
+            }, errorHandler: { error in
+                continuation.resume(throwing: error)
+            })
         }
+    }
 
-        guard session.activationState == .activated else {
-            return nil
-        }
-
+    private func enqueueDurably(_ message: [String: Any], on session: WCSession) throws {
         do {
             try session.updateApplicationContext(message)
         } catch {
-            session.transferUserInfo(message)
-            return "Watch queued; context failed: \(error.localizedDescription)"
+            throw error
         }
-
         session.transferUserInfo(message)
-        return "Watch queued"
+    }
+
+    private func enqueueBestEffort(_ message: [String: Any], on session: WCSession) {
+        try? session.updateApplicationContext(message)
+        session.transferUserInfo(message)
     }
 
     private func publishStatus() {
@@ -149,6 +175,21 @@ final class WatchSessionBridge: NSObject, WCSessionDelegate {
         }
     }
 
+    func session(
+        _ session: WCSession,
+        didReceiveMessageData messageData: Data,
+        replyHandler: @escaping (Data) -> Void
+    ) {
+        let accepted = liveBuffer.receive(messageData)
+        replyHandler(Data([accepted ? 1 : 0]))
+    }
+
+    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        if liveBuffer.receiveApplicationContext(applicationContext) {
+            onStatusChange?("Watch live received in background")
+        }
+    }
+
     private func saveTransferredFile(_ file: WCSessionFile) throws -> URL {
         let filename = (file.metadata?["filename"] as? String) ?? file.fileURL.lastPathComponent
         let safeFilename = filename.replacingOccurrences(of: "/", with: "_")
@@ -156,7 +197,7 @@ final class WatchSessionBridge: NSObject, WCSessionDelegate {
         let destinationURL = documentsURL.appendingPathComponent(safeFilename)
 
         if FileManager.default.fileExists(atPath: destinationURL.path) {
-            try FileManager.default.removeItem(at: destinationURL)
+            throw CocoaError(.fileWriteFileExists)
         }
 
         try FileManager.default.moveItem(at: file.fileURL, to: destinationURL)

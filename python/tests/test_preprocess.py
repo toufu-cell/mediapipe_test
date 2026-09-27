@@ -102,7 +102,7 @@ def test_preprocess_train_no_boundary_crossing() -> None:
         other_id=0,
         label_name_to_id={"walk": 1, "sit": 2},
     )
-    features = preprocess_train(labeled, window_size_ms=2000, step_size_ms=500)
+    features = preprocess_train(labeled, window_size_ms=2000, step_size_ms=500, modality="combined")
     assert len(features) > 0
     assert "label" in features.columns
     assert any("pos-avg" in col for col in features.columns)
@@ -120,8 +120,8 @@ def test_preprocess_eval_full_sequence() -> None:
         other_id=0,
         label_name_to_id={"walk": 1, "sit": 2},
     )
-    eval_features = preprocess_eval(labeled, window_size_ms=2000, step_size_ms=500)
-    train_features = preprocess_train(labeled, window_size_ms=2000, step_size_ms=500)
+    eval_features = preprocess_eval(labeled, window_size_ms=2000, step_size_ms=500, modality="combined")
+    train_features = preprocess_train(labeled, window_size_ms=2000, step_size_ms=500, modality="combined")
     assert len(eval_features) > 0
     assert len(eval_features) >= len(train_features)
 
@@ -142,7 +142,7 @@ def test_preprocess_eval_ignores_non_numeric_columns() -> None:
         label_name_to_id={"walk": 1},
     )
 
-    eval_features = preprocess_eval(labeled, window_size_ms=2000, step_size_ms=500)
+    eval_features = preprocess_eval(labeled, window_size_ms=2000, step_size_ms=500, modality="combined")
 
     assert len(eval_features) > 0
     assert "leftShoulder_x-pos-avg" in eval_features.columns
@@ -156,6 +156,8 @@ def test_preprocess_eval_ignores_non_numeric_columns() -> None:
 
 def test_select_feature_columns_by_modality() -> None:
     df = make_motion_df()
+    df["leftHand_wrist_x"] = np.linspace(0.1, 0.9, len(df))
+    df["rightHand_wrist_x"] = np.linspace(0.9, 0.1, len(df))
     df["imu_timestamp_ms"] = np.arange(100000, 100000 + len(df))
     df["imu_elapsed_ms"] = df["timestamp_ms"] + 100
     df["imu_gyro_norm"] = np.linspace(0.0, 5.0, len(df))
@@ -165,6 +167,10 @@ def test_select_feature_columns_by_modality() -> None:
     combined = select_feature_columns(df, "combined")
     video = select_feature_columns(df, "video")
     watch = select_feature_columns(df, "watch")
+    pose_only = select_feature_columns(df, "pose-only")
+    pose_left_hand = select_feature_columns(df, "pose-left-hand")
+    pose_right_hand = select_feature_columns(df, "pose-right-hand")
+    both_hands = select_feature_columns(df, "both-hands")
 
     assert "leftShoulder_x" in combined
     assert "imu_gyro_norm" in combined
@@ -175,6 +181,22 @@ def test_select_feature_columns_by_modality() -> None:
     assert "leftShoulder_x" not in watch
     assert "imu_timestamp_ms" not in watch
     assert "imu_elapsed_ms" not in watch
+    assert "leftShoulder_x" in pose_only
+    assert "leftHand_wrist_x" not in pose_only
+    assert "rightHand_wrist_x" not in pose_only
+    assert "imu_gyro_norm" not in pose_only
+    assert "leftShoulder_x" in pose_left_hand
+    assert "leftHand_wrist_x" in pose_left_hand
+    assert "rightHand_wrist_x" not in pose_left_hand
+    assert "imu_gyro_norm" not in pose_left_hand
+    assert "leftShoulder_x" in pose_right_hand
+    assert "rightHand_wrist_x" in pose_right_hand
+    assert "leftHand_wrist_x" not in pose_right_hand
+    assert "imu_gyro_norm" not in pose_right_hand
+    assert "leftHand_wrist_x" in both_hands
+    assert "rightHand_wrist_x" in both_hands
+    assert "leftShoulder_x" not in both_hands
+    assert "imu_gyro_norm" not in both_hands
 
 
 def test_preprocess_eval_watch_only_uses_imu_features() -> None:

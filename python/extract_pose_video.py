@@ -65,6 +65,7 @@ CV2_CAP_PROP_FRAME_WIDTH = 3
 CV2_CAP_PROP_FRAME_HEIGHT = 4
 CV2_CAP_PROP_FPS = 5
 CV2_CAP_PROP_FRAME_COUNT = 7
+CV2_CAP_PROP_POS_MSEC = 0
 
 
 def ensure_model_file(model_path: Path, model_url: str = DEFAULT_MODEL_URL) -> Path:
@@ -153,7 +154,6 @@ def build_hand_json_payload(
     width: int,
     height: int,
     fps: float,
-    mirrored: bool = False,
 ) -> dict[str, Any]:
     duration_ms = frames[-1]["timestampMs"] - frames[0]["timestampMs"] if len(frames) > 1 else 0
     estimated_fps = round(fps, 1) if fps > 0 else 0
@@ -169,9 +169,13 @@ def build_hand_json_payload(
             "coordinateSpace": "normalized",
             "sourceWidth": width,
             "sourceHeight": height,
-            "mirrored": mirrored,
-            "handednessAssumesMirroredInput": True,
-            "handednessAdjustedForMirroring": not mirrored,
+            "mirrored": False,
+            "handednessAssumesMirroredInput": False,
+            "handednessAdjustedForMirroring": False,
+            "timestampSources": sorted({
+                frame.get("timestampSource", "unknown")
+                for frame in frames
+            }),
         },
         "frames": frames,
     }
@@ -244,22 +248,64 @@ def write_hand_csv(csv_path: Path, frames: list[dict[str, Any]]) -> None:
     headers = ["timestamp_ms", "frame_index", "hand_index", "handedness", "score"]
     for name in HAND_LANDMARK_NAMES:
         headers.extend([f"{name}_x", f"{name}_y", f"{name}_z"])
+    headers.extend(["detected", "missing_reason", "raw_handedness", "timestamp_source"])
 
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(headers)
         for frame in frames:
-            for hand_index, hand in enumerate(frame.get("hands", [])):
+            hands = frame.get("hands", [])
+            has_ambiguous_hand = any(hand.get("handedness") not in {"Left", "Right"} for hand in hands)
+            for side in ("Left", "Right"):
+                candidates = [hand for hand in hands if hand.get("handedness") == side]
+                hand = max(
+                    candidates,
+                    key=lambda candidate: float(candidate.get("score") or float("-inf")),
+                    default=None,
+                )
                 row = [
                     frame["timestampMs"],
                     frame["frameIndex"],
-                    hand_index,
-                    hand.get("handedness", ""),
-                    hand.get("score", ""),
+                    "" if hand is None else hand.get("handIndex", ""),
+                    side,
+                    "" if hand is None else hand.get("score", ""),
                 ]
-                for landmark in hand["landmarks"]:
-                    row.extend([landmark["x"], landmark["y"], landmark["z"]])
+                if hand is None:
+                    row.extend([""] * (len(HAND_LANDMARK_NAMES) * 3))
+                    row.extend([
+                        "false",
+                        "ambiguous_handedness" if has_ambiguous_hand else "not_detected",
+                        "",
+                        frame.get("timestampSource", "unknown"),
+                    ])
+                else:
+                    for landmark in hand["landmarks"]:
+                        row.extend([landmark["x"], landmark["y"], landmark["z"]])
+                    row.extend([
+                        "true",
+                        "",
+                        hand.get("rawHandedness", ""),
+                        frame.get("timestampSource", "unknown"),
+                    ])
                 writer.writerow(row)
+
+
+def resolve_frame_timestamp_ms(
+    capture: Any,
+    frame_index: int,
+    fps: float,
+    last_timestamp_ms: int,
+) -> tuple[int, str]:
+    raw_timestamp_ms = float(capture.get(CV2_CAP_PROP_POS_MSEC) or 0.0)
+    if math.isfinite(raw_timestamp_ms):
+        candidate = int(round(raw_timestamp_ms))
+        if (frame_index == 0 and candidate >= 0) or candidate > last_timestamp_ms:
+            return candidate, "container_pts"
+
+    candidate = int(round((frame_index / fps) * 1000))
+    if candidate <= last_timestamp_ms:
+        candidate = last_timestamp_ms + 1
+    return candidate, "frame_index_fps_fallback"
 
 
 def apply_landmark_profile(
@@ -348,39 +394,30 @@ def apply_arm_selection(
     }
 
 
-def adjust_handedness_for_mirroring(label: str, mirrored: bool) -> str:
-    if mirrored:
-        return label
-    if label == "Left":
-        return "Right"
-    if label == "Right":
-        return "Left"
-    return label
-
-
-def get_handedness_label_and_score(handedness: Any, mirrored: bool = False) -> tuple[str, str, float | str]:
-    if not handedness:
-        return "", "", ""
-    category = handedness[0]
-    raw_label = getattr(category, "category_name", "")
-    score = getattr(category, "score", "")
-    label = adjust_handedness_for_mirroring(raw_label, mirrored=mirrored)
-    return label, raw_label, score
-
-
-def extract_hand_payloads(result: Any, mirrored: bool = False) -> list[dict[str, Any]]:
+def extract_hand_payloads(result: Any) -> list[dict[str, Any]]:
     hand_landmarks = getattr(result, "hand_landmarks", None) or []
     handedness_list = getattr(result, "handedness", None) or []
+    if len(hand_landmarks) != len(handedness_list):
+        raise ValueError("Hand Landmarker result must contain one handedness entry per detected hand")
+
     hands = []
     for hand_index, landmarks in enumerate(hand_landmarks):
-        handedness, raw_handedness, score = get_handedness_label_and_score(
-            handedness_list[hand_index] if hand_index < len(handedness_list) else None,
-            mirrored=mirrored,
-        )
+        if len(landmarks) != len(HAND_LANDMARK_NAMES):
+            raise ValueError(
+                f"Hand Landmarker must return {len(HAND_LANDMARK_NAMES)} landmarks per hand"
+            )
+        categories = handedness_list[hand_index]
+        if not categories:
+            raise ValueError("Hand Landmarker returned an empty handedness entry")
+        category = categories[0]
+        handedness = getattr(category, "category_name", "")
+        if handedness not in {"Left", "Right"}:
+            raise ValueError(f"Hand Landmarker returned unsupported handedness: {handedness or 'empty'}")
         hands.append({
+            "handIndex": hand_index,
             "handedness": handedness,
-            "rawHandedness": raw_handedness,
-            "score": score,
+            "rawHandedness": handedness,
+            "score": getattr(category, "score", ""),
             "landmarks": [
                 {
                     "x": landmark.x,
@@ -515,11 +552,16 @@ def extract_pose_video(
     max_interpolation_ms: float = DEFAULT_MAX_INTERPOLATION_MS,
     arm_selection: str = DEFAULT_ARM_SELECTION,
     arm_selection_min_score_margin: float = DEFAULT_ARM_SELECTION_MIN_SCORE_MARGIN,
+    extract_pose: bool = True,
     detect_hands: bool = False,
     hand_model_path: Path = DEFAULT_HAND_MODEL_PATH,
     hand_model_url: str = DEFAULT_HAND_MODEL_URL,
     max_hands: int = 2,
 ) -> dict[str, Any]:
+    if not extract_pose and not detect_hands:
+        raise ValueError("At least one of extract_pose or detect_hands must be enabled")
+    if not extract_pose and write_overlay_video:
+        raise ValueError("write_overlay_video is unavailable in hands-only mode")
     if max_hands < 1:
         raise ValueError("max_hands must be greater than or equal to 1")
     validate_pose_filter_options(
@@ -533,7 +575,8 @@ def extract_pose_video(
         arm_selection_min_score_margin=arm_selection_min_score_margin,
     )
 
-    model_path = ensure_model_file(model_path, model_url=model_url)
+    if extract_pose:
+        model_path = ensure_model_file(model_path, model_url=model_url)
     if detect_hands:
         hand_model_path = ensure_model_file(hand_model_path, model_url=hand_model_url)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -559,35 +602,41 @@ def extract_pose_video(
     invalid_streak = 0
     max_interpolation_frames = max_interpolation_frames_for_fps(fps, max_interpolation_ms)
 
+    landmarker = None
+    hand_landmarker = None
     try:
-        with create_pose_landmarker(model_path) as landmarker:
-            hand_landmarker = create_hand_landmarker(hand_model_path, num_hands=max_hands) if detect_hands else None
-            try:
+        landmarker = create_pose_landmarker(model_path) if extract_pose else None
+        hand_landmarker = create_hand_landmarker(hand_model_path, num_hands=max_hands) if detect_hands else None
+        try:
                 while True:
                     ok, frame = capture.read()
                     if not ok:
                         break
 
-                    timestamp_ms = int(round((frame_index / fps) * 1000))
-                    if timestamp_ms <= last_timestamp_ms:
-                        timestamp_ms = last_timestamp_ms + 1
+                    timestamp_ms, timestamp_source = resolve_frame_timestamp_ms(
+                        capture,
+                        frame_index,
+                        fps,
+                        last_timestamp_ms,
+                    )
                     last_timestamp_ms = timestamp_ms
                     mp_image = convert_frame_to_mp_image(frame)
-                    result = landmarker.detect_for_video(mp_image, timestamp_ms)
+                    result = landmarker.detect_for_video(mp_image, timestamp_ms) if landmarker else None
                     hand_result = hand_landmarker.detect_for_video(mp_image, timestamp_ms) if hand_landmarker else None
 
-                    landmarks_payload = None
-                    pose_status = "missing"
-                    invalid_reason = None
-                    interpolated = False
-                    interpolation_source_frame_index = None
-                    arm_metadata = {
-                        "armSelection": arm_selection,
-                        "selectedArm": arm_selection if arm_selection != "auto-visible" else "both",
-                        "leftArmScore": "",
-                        "rightArmScore": "",
-                    }
-                    if getattr(result, "pose_landmarks", None):
+                    if extract_pose:
+                        landmarks_payload = None
+                        pose_status = "missing"
+                        invalid_reason = None
+                        interpolated = False
+                        interpolation_source_frame_index = None
+                        arm_metadata = {
+                            "armSelection": arm_selection,
+                            "selectedArm": arm_selection if arm_selection != "auto-visible" else "both",
+                            "leftArmScore": "",
+                            "rightArmScore": "",
+                        }
+                    if extract_pose and getattr(result, "pose_landmarks", None):
                         pose_landmarks = result.pose_landmarks[0]
                         raw_landmarks_payload = [
                             {
@@ -629,12 +678,12 @@ def extract_pose_video(
                             invalid_streak += 1
                             pose_status = "invalid"
 
-                    else:
+                    elif extract_pose:
                         invalid_reason = "no_pose_detected"
                         if last_valid_landmarks is not None:
                             invalid_streak += 1
 
-                    if (
+                    if extract_pose and (
                         landmarks_payload is None
                         and last_valid_landmarks is not None
                         and 0 < invalid_streak <= max_interpolation_frames
@@ -654,51 +703,64 @@ def extract_pose_video(
                             score_landmarks=last_valid_landmarks,
                         )
 
-                    frames.append({
-                        "frameIndex": frame_index,
-                        "timestampMs": timestamp_ms,
-                        "landmarks": landmarks_payload,
-                        "interpolated": interpolated,
-                        "interpolationSourceFrameIndex": interpolation_source_frame_index,
-                        "poseStatus": pose_status,
-                        "invalidReason": invalid_reason,
-                        **arm_metadata,
-                    })
+                    if extract_pose:
+                        frames.append({
+                            "frameIndex": frame_index,
+                            "timestampMs": timestamp_ms,
+                            "timestampSource": timestamp_source,
+                            "landmarks": landmarks_payload,
+                            "interpolated": interpolated,
+                            "interpolationSourceFrameIndex": interpolation_source_frame_index,
+                            "poseStatus": pose_status,
+                            "invalidReason": invalid_reason,
+                            **arm_metadata,
+                        })
                     if detect_hands:
                         hand_frames.append({
                             "frameIndex": frame_index,
                             "timestampMs": timestamp_ms,
-                            "hands": extract_hand_payloads(hand_result, mirrored=False),
+                            "timestampSource": timestamp_source,
+                            "hands": extract_hand_payloads(hand_result),
                         })
                     frame_index += 1
                     if progress_callback is not None and total_frames > 0:
                         progress_callback(frame_index, total_frames)
-            finally:
-                if hand_landmarker is not None:
-                    hand_landmarker.close()
+        finally:
+            if landmarker is not None:
+                landmarker.close()
+                landmarker = None
+            if hand_landmarker is not None:
+                hand_landmarker.close()
+                hand_landmarker = None
     finally:
+        if landmarker is not None:
+            landmarker.close()
+        if hand_landmarker is not None:
+            hand_landmarker.close()
         capture.release()
 
     if progress_callback is not None and total_frames > 0 and 0 < frame_index < total_frames:
         progress_callback(frame_index, frame_index)
 
     stem = video_path.stem
-    json_path = output_dir / f"{stem}_skeleton_data.json"
-    csv_path = output_dir / f"{stem}_33landmarks.csv"
-    frame_metadata_path = output_dir / f"{stem}_frame_metadata.csv"
+    json_path = output_dir / f"{stem}_skeleton_data.json" if extract_pose else None
+    csv_path = output_dir / f"{stem}_33landmarks.csv" if extract_pose else None
+    frame_metadata_path = output_dir / f"{stem}_frame_metadata.csv" if extract_pose else None
     hand_json_path = output_dir / f"{stem}_hand_landmarks.json" if detect_hands else None
     hand_csv_path = output_dir / f"{stem}_hand_landmarks.csv" if detect_hands else None
     overlay_path = output_dir / f"{stem}_overlay.mp4" if write_overlay_video else None
 
-    payload = build_json_payload(frames, width, height, fps)
-    json_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    write_skeleton_csv(csv_path, frames)
-    write_frame_metadata_csv(frame_metadata_path, frames)
+    if json_path is not None and csv_path is not None and frame_metadata_path is not None:
+        payload = build_json_payload(frames, width, height, fps)
+        json_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        write_skeleton_csv(csv_path, frames)
+        write_frame_metadata_csv(frame_metadata_path, frames)
     if hand_json_path is not None and hand_csv_path is not None:
         hand_payload = build_hand_json_payload(hand_frames, width, height, fps)
         hand_json_path.write_text(json.dumps(hand_payload, ensure_ascii=False), encoding="utf-8")
         write_hand_csv(hand_csv_path, hand_frames)
     if overlay_path is not None:
+        assert json_path is not None
         render_pose_overlay_video(
             video_path,
             json_path,
@@ -708,7 +770,7 @@ def extract_pose_video(
         )
 
     return {
-        "frame_count": len(frames),
+        "frame_count": frame_index,
         "json_path": json_path,
         "csv_path": csv_path,
         "frame_metadata_path": frame_metadata_path,
@@ -719,7 +781,7 @@ def extract_pose_video(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="動画から MediaPipe Pose 33 ランドマークを抽出")
+    parser = argparse.ArgumentParser(description="動画からMediaPipe PoseまたはHand landmarksを抽出")
     parser.add_argument("video_path", type=Path, help="入力動画ファイル")
     parser.add_argument(
         "-o",
@@ -813,6 +875,11 @@ def main() -> None:
         help="Pose とは別に HandLandmarker で画面内の手 21 点も抽出する",
     )
     parser.add_argument(
+        "--hands-only",
+        action="store_true",
+        help="Pose modelを使わず、Hand 21点だけを抽出する",
+    )
+    parser.add_argument(
         "--hand-model-path",
         type=Path,
         default=DEFAULT_HAND_MODEL_PATH,
@@ -863,14 +930,18 @@ def main() -> None:
         max_interpolation_ms=args.max_interpolation_ms,
         arm_selection=args.arm_selection,
         arm_selection_min_score_margin=args.arm_selection_min_score_margin,
-        detect_hands=args.detect_hands,
+        extract_pose=not args.hands_only,
+        detect_hands=args.detect_hands or args.hands_only,
         hand_model_path=args.hand_model_path,
         hand_model_url=args.hand_model_url,
         max_hands=args.max_hands,
     )
-    print(f"[保存] JSON: {result['json_path']}")
-    print(f"[保存] CSV: {result['csv_path']}")
-    print(f"[保存] Frame Metadata CSV: {result['frame_metadata_path']}")
+    if result.get("json_path") is not None:
+        print(f"[保存] JSON: {result['json_path']}")
+    if result.get("csv_path") is not None:
+        print(f"[保存] CSV: {result['csv_path']}")
+    if result.get("frame_metadata_path") is not None:
+        print(f"[保存] Frame Metadata CSV: {result['frame_metadata_path']}")
     if result.get("hand_json_path") is not None:
         print(f"[保存] Hand JSON: {result['hand_json_path']}")
     if result.get("hand_csv_path") is not None:

@@ -60,6 +60,34 @@ def test_normalize_timeline_labels() -> None:
     assert annotations[1]["end_ms"] == 5000  # 150 frames / 30fps = 5s = 5000ms
 
 
+def test_normalize_timeline_labels_uses_local_file_video_url() -> None:
+    data = [
+        {
+            "file_upload": None,
+            "data": {
+                "video": "/data/local-files/?d=capture-1/capture-1_labelstudio.mp4"
+            },
+            "annotations": [{
+                "result": [{
+                    "value": {
+                        "ranges": [{"start": 30, "end": 90}],
+                        "timelinelabels": ["walk"],
+                    },
+                    "type": "timelinelabels",
+                }],
+            }],
+        },
+    ]
+
+    result = normalize_timeline_labels(data, fps=30.0)
+
+    assert result == {
+        "capture-1_labelstudio.mp4": [
+            {"start_ms": 1000, "end_ms": 3000, "label": "walk"}
+        ]
+    }
+
+
 def test_load_annotations_timeline_format() -> None:
     """TimelineLabels形式のJSONをload_annotationsで自動判定できる"""
     data = [

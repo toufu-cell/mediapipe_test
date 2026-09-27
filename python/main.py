@@ -8,6 +8,7 @@ from modules.labels import Labels
 from modules.normalize_labels import load_annotations
 from modules.plot import plot_confusion_matrix, plot_time_series_comparison
 from modules.preprocess import (
+    DEFAULT_MODALITY,
     SUPPORTED_MODALITIES,
     assign_labels,
     load_motion_source,
@@ -47,7 +48,7 @@ def run_single(
     step_ms: float,
     output_dir: Path,
     classifier: str = "xgboost",
-    modality: str = "combined",
+    modality: str = DEFAULT_MODALITY,
 ) -> dict:
     """単一テスト被験者での学習・評価"""
     train_features_list: list[pd.DataFrame] = []
@@ -119,7 +120,7 @@ def run_loso(
     step_ms: float,
     output_dir: Path,
     classifier: str = "xgboost",
-    modality: str = "combined",
+    modality: str = DEFAULT_MODALITY,
 ) -> pd.DataFrame:
     """全被験者を順番にテストに回すLOSO評価"""
     results: list[dict] = []
@@ -288,7 +289,7 @@ def main() -> None:
         type=str,
         choices=SUPPORTED_MODALITIES,
         default=None,
-        help="学習に使う特徴量種別（combined, video, watch）",
+        help=f"学習に使う特徴量種別（省略時: {DEFAULT_MODALITY}）",
     )
     parser.add_argument(
         "--compare-modalities",
@@ -304,7 +305,7 @@ def main() -> None:
 
     window_ms = args.window_sec * 1000
     step_ms = args.step_sec * 1000
-    modality = args.modality or "combined"
+    modality = args.modality or DEFAULT_MODALITY
 
     labels = Labels(args.data_dir / "labels.csv")
     label_name_to_id = labels.name_to_id_map()

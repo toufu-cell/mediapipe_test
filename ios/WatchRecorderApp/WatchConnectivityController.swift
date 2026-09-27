@@ -10,9 +10,12 @@ private struct PendingStart {
 
 @MainActor
 final class WatchConnectivityController: NSObject, ObservableObject {
+    private static let stoppedSessionIdsKey = "capture.stoppedSessionIds"
+
     @Published private(set) var status = "Activating"
     @Published private(set) var sessionId: String?
     @Published private(set) var isRecording = false
+    @Published private(set) var isLive = false
 
     private let recorder = WatchIMURecorder()
     private var pendingStartTask: Task<Void, Never>?
@@ -23,12 +26,177 @@ final class WatchConnectivityController: NSObject, ObservableObject {
     private var outputFilename = "watch_imu.csv"
     private var currentStartAt: Date?
     private var currentSampleRateHz = 50
-    private var deliveryState = WatchCommandDeliveryState()
+    private var currentWristSide: CaptureWristSide?
+    private var pendingExportSessionId: String?
+    private var deliveryState: WatchCommandDeliveryState
     private var runtimeSession: WKExtendedRuntimeSession?
+    private var liveStreamId: String?
+    private var liveSequence = 0
+    private var liveSendSequence: Int?
+    private var liveSendTimeout: Task<Void, Never>?
+    private var liveSendTimedOut = false
+    private var lastBackgroundSampleTime: TimeInterval?
+
+    var canStartLive: Bool {
+        !isRecording && pendingStart == nil && pendingStartTask == nil && pendingExportSessionId == nil
+    }
+
+    func startLive() {
+        guard !isLive, canStartLive else { return }
+        guard isSceneActive, WCSession.default.activationState == .activated else {
+            status = "Open this app and wait for activation"
+            return
+        }
+        liveStreamId = UUID().uuidString
+        liveSequence = 0
+        liveSendSequence = nil
+        liveSendTimedOut = false
+        lastBackgroundSampleTime = nil
+        isLive = true
+        status = "Live runtime starting"
+        startExtendedRuntimeSession()
+    }
+
+    func stopLive(status message: String = "Live stopped", invalidateRuntime: Bool = true) {
+        guard isLive else { return }
+        isLive = false
+        liveStreamId = nil
+        liveSendSequence = nil
+        liveSendTimedOut = false
+        lastBackgroundSampleTime = nil
+        liveSendTimeout?.cancel()
+        liveSendTimeout = nil
+        recorder.stop()
+        recorder.discardSamples()
+        let session = WCSession.default
+        if session.activationState == .activated,
+           session.applicationContext[WatchLiveSample.applicationContextKey] != nil {
+            try? session.updateApplicationContext([:])
+        }
+        status = message
+        if invalidateRuntime { invalidateExtendedRuntimeSession() }
+    }
+
+    private func startLiveSampling() {
+        guard isLive, let liveStreamId, runtimeSession?.state == .running else { return }
+        do {
+            try recorder.start(
+                sessionId: liveStreamId,
+                sampleRateHz: 10,
+                startedAt: Date(),
+                retainSamples: false
+            ) { [weak self] sample in
+                Task { @MainActor [weak self] in self?.sendLiveSample(sample) }
+            }
+            status = "Live: waiting for iPhone"
+        } catch {
+            stopLive(status: "Live failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func sendLiveSample(_ sample: WatchIMUSample) {
+        guard isLive, sample.sessionId == liveStreamId else { return }
+        guard liveSequence < Int(Int32.max) else {
+            stopLive(status: "Restart live monitor to reset sequence")
+            return
+        }
+        liveSequence += 1
+        guard Date().timeIntervalSince(sample.timestamp) < 1 else { return }
+        let session = WCSession.default
+        guard session.activationState == .activated else {
+            status = "Live: Watch connection not activated"
+            return
+        }
+        let useBackground = !session.isReachable || liveSendTimedOut
+        if useBackground {
+            if let lastBackgroundSampleTime, sample.coreMotionTimestamp - lastBackgroundSampleTime < 0.5 {
+                return
+            }
+        } else if liveSendSequence != nil {
+            return
+        }
+        let device = WKInterfaceDevice.current()
+        let payload = WatchLiveSample(
+            streamId: sample.sessionId, sequence: liveSequence,
+            timestampMs: Double(sample.timestampMs), motionTimestampSec: sample.coreMotionTimestamp,
+            wristSide: device.wristLocation == .right ? "right" : "left",
+            crownOrientation: device.crownOrientation == .right ? "right" : "left",
+            gravity: [sample.gravityX, sample.gravityY, sample.gravityZ],
+            gyro: [sample.gyroX, sample.gyroY, sample.gyroZ],
+            acceleration: [sample.accelX, sample.accelY, sample.accelZ],
+            quaternion: [sample.quaternionX, sample.quaternionY, sample.quaternionZ, sample.quaternionW]
+        )
+        guard payload.isValid, let data = try? JSONEncoder().encode(payload) else {
+            stopLive(status: "Live sample is invalid")
+            return
+        }
+        if useBackground {
+            lastBackgroundSampleTime = sample.coreMotionTimestamp
+            do {
+                // Only the latest value is retained; delivery timing is controlled by watchOS.
+                try session.updateApplicationContext([WatchLiveSample.applicationContextKey: data])
+                status = "Live: background queued #\(liveSequence)"
+            } catch {
+                status = "Live background failed: \(error.localizedDescription)"
+            }
+            return
+        }
+        let streamId = sample.sessionId
+        let sequence = liveSequence
+        liveSendSequence = sequence
+        liveSendTimeout = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            guard let self, liveStreamId == streamId, liveSendSequence == sequence else { return }
+            // Keep the outstanding message tracked so stalled replies cannot build an unbounded queue.
+            liveSendTimedOut = true
+            status = "Live: reply delayed; using background updates"
+        }
+        session.sendMessageData(data, replyHandler: { @Sendable [weak self] reply in
+            Task { @MainActor [weak self] in
+                self?.finishLiveSend(streamId: streamId, sequence: sequence, error: reply == Data([1]) ? nil : "iPhone rejected sample")
+            }
+        }, errorHandler: { @Sendable [weak self] error in
+            let message = error.localizedDescription
+            Task { @MainActor [weak self] in
+                self?.finishLiveSend(streamId: streamId, sequence: sequence, error: message)
+            }
+        })
+    }
+
+    private func finishLiveSend(streamId: String, sequence: Int, error: String?) {
+        guard isLive, liveStreamId == streamId, liveSendSequence == sequence else { return }
+        liveSendSequence = nil
+        liveSendTimedOut = false
+        liveSendTimeout?.cancel()
+        liveSendTimeout = nil
+        status = error.map { "Live send failed: \($0)" } ?? "Live sent #\(sequence)"
+    }
 
     override init() {
+        deliveryState = WatchCommandDeliveryState(
+            stoppedSessionIds: UserDefaults.standard.stringArray(forKey: Self.stoppedSessionIdsKey) ?? []
+        )
         super.init()
+        recorder.onError = { [weak self] message in
+            DispatchQueue.main.async { [weak self] in
+                self?.handleRecorderError(message)
+            }
+        }
         activateSession()
+    }
+
+    private func handleRecorderError(_ message: String) {
+        if isLive {
+            stopLive(status: "Live failed: \(message)")
+            return
+        }
+        guard isRecording else {
+            return
+        }
+        recorder.stop()
+        isRecording = false
+        status = "Recording failed: \(message)"
+        invalidateExtendedRuntimeSession()
     }
 
     private func activateSession() {
@@ -42,19 +210,55 @@ final class WatchConnectivityController: NSObject, ObservableObject {
         session.activate()
     }
 
-    private func handle(_ payload: WatchCommandPayload) {
+    @discardableResult
+    private func handle(_ payload: WatchCommandPayload) -> String? {
         switch payload {
-        case let .start(sessionId, startAt, sampleRateHz, filename):
-            handleStart(sessionId: sessionId, startAt: startAt, sampleRateHz: sampleRateHz, filename: filename)
+        case let .start(sessionId, startAt, sampleRateHz, filename, wristSide):
+            return handleStart(
+                sessionId: sessionId,
+                startAt: startAt,
+                sampleRateHz: sampleRateHz,
+                filename: filename,
+                wristSide: wristSide
+            )
         case let .stop(sessionId):
-            handleStop(sessionId: sessionId)
+            return handleStop(sessionId: sessionId)
         }
     }
 
-    private func handleStart(sessionId: String, startAt: Date, sampleRateHz: Int, filename: String?) {
+    private func handleStart(
+        sessionId: String,
+        startAt: Date,
+        sampleRateHz: Int,
+        filename: String?,
+        wristSide: CaptureWristSide?
+    ) -> String? {
+        guard !isLive else { return "Stop Watch live monitor before starting a recording" }
+        if let wristSide {
+            let configuredWristSide: CaptureWristSide = (
+                WKInterfaceDevice.current().wristLocation == .right ? .right : .left
+            )
+            guard wristSide == configuredWristSide else {
+                status = "Start rejected: Watch wrist setting is \(configuredWristSide.rawValue)"
+                return status
+            }
+        }
+
         guard !deliveryState.hasStopped(sessionId) else {
             status = "Ignored stopped start"
-            return
+            return "Session has already stopped: \(sessionId)"
+        }
+
+        let activeSessionId: String? = if let pendingExportSessionId {
+            pendingExportSessionId
+        } else if isRecording || pendingStart != nil || pendingStartTask != nil {
+            pendingStart?.sessionId ?? pendingStartSessionId ?? self.sessionId
+        } else {
+            nil
+        }
+        guard activeSessionId == nil || activeSessionId == sessionId else {
+            status = "Rejected Start; session \(activeSessionId ?? "unknown") is active"
+            return status
         }
 
         guard !deliveryState.isCurrentOrPending(
@@ -63,23 +267,37 @@ final class WatchConnectivityController: NSObject, ObservableObject {
             pendingStartSessionId: pendingStartSessionId
         ) else {
             status = "Ignored duplicate start"
-            return
+            return nil
+        }
+
+        do {
+            try validateOutputAvailable(filename: filename ?? "\(sessionId)_wrist_imu.csv")
+        } catch {
+            status = "Start rejected: \(error.localizedDescription)"
+            return status
         }
 
         pendingStartTask?.cancel()
         pendingStartTask = nil
         pendingStartSessionId = sessionId
-        pendingStart = PendingStart(sessionId: sessionId, startAt: startAt, sampleRateHz: sampleRateHz)
+        pendingStart = PendingStart(
+            sessionId: sessionId,
+            startAt: startAt,
+            sampleRateHz: sampleRateHz
+        )
         shouldRetryRuntimeStartWhenActive = false
         recorder.stop()
+        recorder.discardSamples()
         isRecording = false
         self.sessionId = sessionId
         outputFilename = filename ?? "\(sessionId)_wrist_imu.csv"
         currentStartAt = startAt
         currentSampleRateHz = sampleRateHz
+        currentWristSide = wristSide
 
         startExtendedRuntimeSession()
         status = "Runtime starting"
+        return nil
     }
 
     private func startRecording(sessionId: String, sampleRateHz: Int, startedAt: Date) {
@@ -87,6 +305,7 @@ final class WatchConnectivityController: NSObject, ObservableObject {
             pendingStartTask = nil
             pendingStartSessionId = nil
             pendingStart = nil
+            self.sessionId = nil
             isRecording = false
             status = "Start failed: runtime not running"
             invalidateExtendedRuntimeSession()
@@ -107,31 +326,47 @@ final class WatchConnectivityController: NSObject, ObservableObject {
             pendingStartTask = nil
             pendingStartSessionId = nil
             pendingStart = nil
+            self.sessionId = nil
+            invalidateExtendedRuntimeSession()
         }
     }
 
-    private func handleStop(sessionId stopSessionId: String) {
+    private func handleStop(sessionId stopSessionId: String) -> String? {
+        if pendingExportSessionId == stopSessionId {
+            return finishCapture(
+                sessionId: stopSessionId,
+                statusPrefix: "Transfer retry",
+                invalidateRuntime: true
+            )
+        }
+
         let matchesCurrentOrPending = stopSessionId == sessionId
             || stopSessionId == pendingStart?.sessionId
             || stopSessionId == pendingStartSessionId
 
         markStoppedSession(stopSessionId)
 
-        guard stopSessionId == sessionId || stopSessionId == pendingStart?.sessionId || stopSessionId == pendingStartSessionId else {
-            status = matchesCurrentOrPending ? "Ignored stale stop" : "Marked stopped session"
-            return
+        guard matchesCurrentOrPending else {
+            status = "Marked stopped session"
+            return nil
         }
 
         guard isRecording || pendingStart != nil || pendingStartTask != nil else {
             status = "Ignored duplicate stop"
-            return
+            return nil
         }
 
-        finishCapture(sessionId: stopSessionId, statusPrefix: "Transferred", invalidateRuntime: true)
+        return finishCapture(sessionId: stopSessionId, statusPrefix: "Transferred", invalidateRuntime: true)
     }
 
-    private func finishCapture(sessionId finishedSessionId: String, statusPrefix: String, invalidateRuntime: Bool) {
+    @discardableResult
+    private func finishCapture(
+        sessionId finishedSessionId: String,
+        statusPrefix: String,
+        invalidateRuntime: Bool
+    ) -> String? {
         markStoppedSession(finishedSessionId)
+        let hadRecording = isRecording
         pendingStartTask?.cancel()
         pendingStartTask = nil
         pendingStartSessionId = nil
@@ -139,18 +374,32 @@ final class WatchConnectivityController: NSObject, ObservableObject {
         shouldRetryRuntimeStartWhenActive = false
         recorder.stop()
         isRecording = false
+        var resultError: String?
 
-        do {
-            let fileURL = try writeCSVFile()
-            WCSession.default.transferFile(fileURL, metadata: [
-                "sessionId": sessionId ?? "",
-                "filename": fileURL.lastPathComponent,
-                "sampleRateHz": currentSampleRateHz,
-                "startAt": currentStartAt.map { ISO8601DateFormatter().string(from: $0) } ?? "",
-            ])
-            status = "\(statusPrefix) \(fileURL.lastPathComponent)"
-        } catch {
-            status = "\(statusPrefix) failed: \(error.localizedDescription)"
+        if WatchIMUExportDecision.shouldExport(
+            hadRecording: hadRecording,
+            pendingExportSessionId: pendingExportSessionId,
+            finishedSessionId: finishedSessionId
+        ) {
+            do {
+                let fileURL = try writeCSVFile()
+                WCSession.default.transferFile(fileURL, metadata: [
+                    "sessionId": sessionId ?? "",
+                    "filename": fileURL.lastPathComponent,
+                    "sampleRateHz": currentSampleRateHz,
+                    "startAt": currentStartAt.map { ISO8601DateFormatter().string(from: $0) } ?? "",
+                    "wristSide": currentWristSide?.rawValue ?? "unknown",
+                ])
+                pendingExportSessionId = nil
+                status = "\(statusPrefix) \(fileURL.lastPathComponent)"
+            } catch {
+                pendingExportSessionId = finishedSessionId
+                status = "\(statusPrefix) failed: \(error.localizedDescription)"
+                resultError = status
+            }
+        } else {
+            recorder.discardSamples()
+            status = "Canceled pending Start"
         }
 
         sessionId = finishedSessionId
@@ -158,9 +407,20 @@ final class WatchConnectivityController: NSObject, ObservableObject {
         if invalidateRuntime {
             invalidateExtendedRuntimeSession()
         }
+        return resultError
     }
 
     private func startExtendedRuntimeSession() {
+        if let runtimeSession, runtimeSession.state == .running {
+            if isLive {
+                startLiveSampling()
+                return
+            }
+            if let pendingStart {
+                schedulePendingStartIfReady(for: pendingStart.sessionId)
+            }
+            return
+        }
         if let runtimeSession, runtimeSession.state != .invalid {
             return
         }
@@ -193,6 +453,7 @@ final class WatchConnectivityController: NSObject, ObservableObject {
         pendingStartTask = nil
         pendingStartSessionId = nil
         pendingStart = nil
+        sessionId = nil
         shouldRetryRuntimeStartWhenActive = false
         isRecording = false
         status = "\(message); start canceled"
@@ -245,14 +506,32 @@ final class WatchConnectivityController: NSObject, ObservableObject {
 
     private func markStoppedSession(_ sessionId: String) {
         deliveryState.markStopped(sessionId)
+        UserDefaults.standard.set(
+            deliveryState.stoppedSessionHistory,
+            forKey: Self.stoppedSessionIdsKey
+        )
     }
 
     private func writeCSVFile() throws -> URL {
-        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let safeFilename = outputFilename.replacingOccurrences(of: "/", with: "_")
-        let fileURL = directory.appendingPathComponent(safeFilename)
-        try recorder.makeCSVData().write(to: fileURL, options: .atomic)
+        let fileURL = outputURL(filename: outputFilename)
+        guard !FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw CocoaError(.fileWriteFileExists)
+        }
+        try recorder.makeCSVData(wristSide: currentWristSide).write(to: fileURL, options: .withoutOverwriting)
         return fileURL
+    }
+
+    private func validateOutputAvailable(filename: String) throws {
+        let fileURL = outputURL(filename: filename)
+        guard !FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw CocoaError(.fileWriteFileExists)
+        }
+    }
+
+    private func outputURL(filename: String) -> URL {
+        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let safeFilename = filename.replacingOccurrences(of: "/", with: "_")
+        return directory.appendingPathComponent(safeFilename)
     }
 }
 
@@ -264,7 +543,9 @@ extension WatchConnectivityController: WKExtendedRuntimeSessionDelegate {
                 return
             }
 
-            if let pendingStart {
+            if isLive {
+                startLiveSampling()
+            } else if let pendingStart {
                 schedulePendingStartIfReady(for: pendingStart.sessionId)
             } else {
                 status = isRecording ? "Recording; runtime active" : "Runtime active"
@@ -297,7 +578,9 @@ extension WatchConnectivityController: WKExtendedRuntimeSessionDelegate {
             runtimeSession = nil
             let message = runtimeInvalidationMessage(reason: reason, error: error)
 
-            if isRecording, let sessionId {
+            if isLive {
+                stopLive(status: message, invalidateRuntime: false)
+            } else if isRecording, let sessionId {
                 finishCapture(sessionId: sessionId, statusPrefix: message, invalidateRuntime: false)
             } else if pendingStart != nil || pendingStartTask != nil {
                 pendingStartTask?.cancel()
@@ -359,9 +642,13 @@ extension WatchConnectivityController: WCSessionDelegate {
             return
         }
 
-        replyHandler(["ok": true, "status": "accepted"])
+        let reply = WatchReplyHandler(replyHandler)
         Task { @MainActor in
-            handle(payload)
+            if let errorMessage = handle(payload) {
+                reply.send(["ok": false, "error": errorMessage])
+            } else {
+                reply.send(["ok": true, "status": "accepted"])
+            }
         }
     }
 
@@ -383,6 +670,18 @@ extension WatchConnectivityController: WCSessionDelegate {
         Task { @MainActor in
             handle(payload)
         }
+    }
+}
+
+private final class WatchReplyHandler: @unchecked Sendable {
+    private let handler: ([String: Any]) -> Void
+
+    init(_ handler: @escaping ([String: Any]) -> Void) {
+        self.handler = handler
+    }
+
+    func send(_ payload: [String: Any]) {
+        handler(payload)
     }
 }
 
@@ -419,7 +718,13 @@ private func shouldRetryRuntimeStart(reason: WKExtendedRuntimeSessionInvalidatio
 }
 
 private enum WatchCommandPayload: Sendable {
-    case start(sessionId: String, startAt: Date, sampleRateHz: Int, filename: String?)
+    case start(
+        sessionId: String,
+        startAt: Date,
+        sampleRateHz: Int,
+        filename: String?,
+        wristSide: CaptureWristSide?
+    )
     case stop(sessionId: String)
 
     init?(message: [String: Any]) {
@@ -441,7 +746,8 @@ private enum WatchCommandPayload: Sendable {
                 sessionId: sessionId,
                 startAt: startAt,
                 sampleRateHz: (message["sampleRateHz"] as? Int) ?? 50,
-                filename: message["filename"] as? String
+                filename: message["filename"] as? String,
+                wristSide: (message["wristSide"] as? String).flatMap(CaptureWristSide.init(rawValue:))
             )
         case "stop":
             guard let sessionId = message["sessionId"] as? String else {

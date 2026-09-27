@@ -65,7 +65,14 @@ export interface MotionGraphSettings {
 }
 
 /** 入力ソース */
-export type InputSource = 'camera' | 'videoFile' | 'skeletonPlayer' | 'skeleton3D' | 'captureSession';
+export type InputSource =
+    | 'camera'
+    | 'videoFile'
+    | 'skeletonPlayer'
+    | 'skeleton3D'
+    | 'captureSession'
+    | 'watchLive'
+    | 'motionComparison';
 
 /** 関節名からランドマークindexへのマッピング */
 export const JOINT_LANDMARK_MAP: Record<JointName, number> = {

@@ -5,7 +5,7 @@ struct WatchRecorderView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(controller.isRecording ? "Recording" : "Waiting")
+            Text(controller.isRecording ? "Recording" : controller.isLive ? "Live monitor" : "Waiting")
                 .font(.headline)
                 .foregroundStyle(controller.isRecording ? .red : .primary)
 
@@ -17,6 +17,16 @@ struct WatchRecorderView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
+
+            Button(controller.isLive ? "Stop live" : "Start live") {
+                if controller.isLive {
+                    controller.stopLive()
+                } else {
+                    controller.startLive()
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(!controller.isLive && !controller.canStartLive)
         }
         .padding()
     }

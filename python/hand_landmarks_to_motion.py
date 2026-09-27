@@ -100,6 +100,9 @@ def convert_hand_csv(
             row_by_key[key] = row
         for side, label in (("left", "Left"), ("right", "Right")):
             candidates = frame_df[frame_df["handedness"] == label].copy()
+            if "detected" in candidates.columns:
+                detected = candidates["detected"].astype(str).str.lower() == "true"
+                candidates = candidates[detected]
             if candidates.empty:
                 continue
             candidates["score"] = pd.to_numeric(candidates["score"], errors="coerce")

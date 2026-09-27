@@ -53,3 +53,19 @@ def test_convert_hand_csv_rejects_missing_required_columns(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="Missing required columns"):
         convert_hand_csv(input_csv, output_csv)
+
+
+def test_convert_hand_csv_ignores_explicit_missing_rows(tmp_path: Path) -> None:
+    input_csv = tmp_path / "hands.csv"
+    output_csv = tmp_path / "motion.csv"
+    missing = make_hand_row(frame_index=0, score=1.0, offset=99.0)
+    missing["detected"] = "false"
+    detected = make_hand_row(frame_index=0, score=0.8, offset=8.0)
+    detected["detected"] = "true"
+    pd.DataFrame([missing, detected]).to_csv(input_csv, index=False)
+
+    convert_hand_csv(input_csv, output_csv)
+
+    result = pd.read_csv(output_csv)
+    assert result.loc[0, "leftHand_score"] == pytest.approx(0.8)
+    assert result.loc[0, "leftHand_wrist_x"] == pytest.approx(8.0)

@@ -7,7 +7,16 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_MODALITIES = ("combined", "video", "watch")
+SUPPORTED_MODALITIES = (
+    "combined",
+    "video",
+    "watch",
+    "pose-only",
+    "pose-left-hand",
+    "pose-right-hand",
+    "both-hands",
+)
+DEFAULT_MODALITY = "both-hands"
 META_COLUMNS = {
     "timestamp_ms",
     "frame_index",
@@ -75,7 +84,7 @@ def _get_feature_names(columns: pd.Index, suffix: str) -> list[str]:
     return [f"{column}-{suffix}" for column in columns]
 
 
-def select_feature_columns(df: pd.DataFrame, modality: str = "combined") -> list[str]:
+def select_feature_columns(df: pd.DataFrame, modality: str = DEFAULT_MODALITY) -> list[str]:
     """学習に使う数値特徴列を modality ごとに選ぶ。"""
     if modality not in SUPPORTED_MODALITIES:
         raise ValueError(
@@ -88,6 +97,30 @@ def select_feature_columns(df: pd.DataFrame, modality: str = "combined") -> list
 
     if modality == "watch":
         feature_cols = [column for column in numeric_cols if column.startswith("imu_")]
+    elif modality == "pose-only":
+        feature_cols = [
+            column
+            for column in numeric_cols
+            if not column.startswith(("imu_", "leftHand_", "rightHand_"))
+        ]
+    elif modality == "pose-left-hand":
+        feature_cols = [
+            column
+            for column in numeric_cols
+            if not column.startswith(("imu_", "rightHand_"))
+        ]
+    elif modality == "pose-right-hand":
+        feature_cols = [
+            column
+            for column in numeric_cols
+            if not column.startswith(("imu_", "leftHand_"))
+        ]
+    elif modality == "both-hands":
+        feature_cols = [
+            column
+            for column in numeric_cols
+            if column.startswith(("leftHand_", "rightHand_"))
+        ]
     elif modality == "video":
         feature_cols = [column for column in numeric_cols if not column.startswith("imu_")]
     else:
@@ -122,7 +155,7 @@ def extract_features(
     df: pd.DataFrame,
     window_size_ms: float = 5000,
     step_size_ms: float = 500,
-    modality: str = "combined",
+    modality: str = DEFAULT_MODALITY,
 ) -> pd.DataFrame:
     """スライディングウィンドウで統計特徴量を抽出する。"""
     feature_cols = select_feature_columns(df, modality)
@@ -152,7 +185,7 @@ def preprocess_train(
     labeled_df: pd.DataFrame,
     window_size_ms: float = 5000,
     step_size_ms: float = 500,
-    modality: str = "combined",
+    modality: str = DEFAULT_MODALITY,
 ) -> pd.DataFrame:
     """train 用: 連続ラベル区間のみで特徴量抽出する。"""
     features = [
@@ -169,7 +202,7 @@ def preprocess_eval(
     labeled_df: pd.DataFrame,
     window_size_ms: float = 5000,
     step_size_ms: float = 500,
-    modality: str = "combined",
+    modality: str = DEFAULT_MODALITY,
 ) -> pd.DataFrame:
     """eval 用: full sequence をそのまま windowing する。"""
     return extract_features(labeled_df, window_size_ms, step_size_ms, modality)

@@ -4,8 +4,12 @@ import Network
 final class CaptureCommandServer: @unchecked Sendable {
     let port: UInt16
 
-    private let handler: @Sendable (CaptureCommand) -> Void
+    private let handler: @Sendable (
+        CaptureCommand,
+        @escaping @Sendable (String?) -> Void
+    ) -> Void
     private var token: String
+    private let liveSnapshot: @Sendable () -> WatchLiveSnapshot
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "app.mediapipe.capture.command-server")
 
@@ -13,10 +17,15 @@ final class CaptureCommandServer: @unchecked Sendable {
     init(
         port: UInt16,
         token: String,
-        handler: @escaping @Sendable (CaptureCommand) -> Void
+        liveSnapshot: @escaping @Sendable () -> WatchLiveSnapshot,
+        handler: @escaping @Sendable (
+            CaptureCommand,
+            @escaping @Sendable (String?) -> Void
+        ) -> Void
     ) {
         self.port = port
         self.token = token
+        self.liveSnapshot = liveSnapshot
         self.handler = handler
     }
 
@@ -97,8 +106,24 @@ final class CaptureCommandServer: @unchecked Sendable {
                 line,
                 expectedToken: token
             )
-            handler(command)
-            sendResponse(["ok": true], on: connection)
+            if command == .watchLive {
+                let data = try JSONEncoder().encode(liveSnapshot())
+                let snapshot = try JSONSerialization.jsonObject(with: data)
+                sendResponse(["ok": true, "live": snapshot], on: connection)
+                return
+            }
+            handler(command) { [weak self] errorMessage in
+                guard let self else {
+                    return
+                }
+                self.queue.async {
+                    if let errorMessage {
+                        self.sendResponse(["ok": false, "error": errorMessage], on: connection)
+                    } else {
+                        self.sendResponse(["ok": true], on: connection)
+                    }
+                }
+            }
         } catch {
             sendResponse(["ok": false, "error": "\(error)"], on: connection)
         }

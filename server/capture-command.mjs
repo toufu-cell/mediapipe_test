@@ -4,6 +4,15 @@ const DEFAULT_PORT = 8765;
 const DEFAULT_TIMEOUT_MS = 8000;
 const MAX_RESPONSE_BYTES = 8192;
 const MAX_REQUEST_BYTES = 16 * 1024;
+const IPHONE_COMMAND_REJECTED = 'iphone_command_rejected';
+
+class IPhoneCommandRejectedError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'IPhoneCommandRejectedError';
+        this.code = IPHONE_COMMAND_REJECTED;
+    }
+}
 
 function isPlainObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -34,8 +43,8 @@ function validateCommand(command) {
         throw new Error('command must be an object');
     }
 
-    if (command.type !== 'start' && command.type !== 'stop') {
-        throw new Error('command.type must be start or stop');
+    if (!['start', 'stop', 'watch-live'].includes(command.type)) {
+        throw new Error('command.type must be start, stop, or watch-live');
     }
 
     return command;
@@ -43,12 +52,12 @@ function validateCommand(command) {
 
 function validateToken(token) {
     if (typeof token !== 'string') {
-        throw new Error('pairing token is required');
+        throw new Error('pairing code is required');
     }
 
     const trimmed = token.trim();
-    if (trimmed.length < 16 || trimmed.length > 256) {
-        throw new Error('pairing token must be 16 to 256 characters');
+    if (trimmed.length < 8 || trimmed.length > 256) {
+        throw new Error('pairing code must be 8 to 256 characters');
     }
     return trimmed;
 }
@@ -70,7 +79,7 @@ function parseResponseLine(line) {
         const reason = isPlainObject(response) && typeof response.error === 'string'
             ? `: ${response.error}`
             : '';
-        throw new Error(`iPhone recorder rejected command${reason}`);
+        throw new IPhoneCommandRejectedError(`iPhone recorder rejected command${reason}`);
     }
     return response;
 }
@@ -228,7 +237,11 @@ export function createCaptureCommandMiddleware() {
                 : message.startsWith('iPhone ')
                     ? 502
                     : 400;
-            writeJson(res, statusCode, { ok: false, error: message });
+            writeJson(res, statusCode, {
+                ok: false,
+                error: message,
+                ...(error instanceof IPhoneCommandRejectedError ? { errorCode: error.code } : {}),
+            });
         }
     };
 }

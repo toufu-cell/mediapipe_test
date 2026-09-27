@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 
 def normalize_label_studio(path: Path) -> list[dict]:
@@ -41,9 +42,17 @@ def normalize_timeline_labels(data: list[dict], fps: float = 30.0) -> dict[str, 
 
     for task in data:
         file_upload = task.get("file_upload", "")
-        # "uuid-IMG_1688.mp4" → "IMG_1688.mp4"
-        parts = file_upload.split("-", 1)
-        filename = parts[1] if len(parts) > 1 else file_upload
+        if file_upload:
+            # "uuid-IMG_1688.mp4" → "IMG_1688.mp4"
+            parts = file_upload.split("-", 1)
+            filename = parts[1] if len(parts) > 1 else file_upload
+        else:
+            video_url = task.get("data", {}).get("video", "")
+            parsed_url = urlparse(video_url)
+            local_file = parse_qs(parsed_url.query).get("d", [parsed_url.path])[0]
+            filename = Path(local_file).name
+        if not filename:
+            raise ValueError("TimelineLabels task has no video filename")
 
         annotations: list[dict] = []
         for annotation in task.get("annotations", []):

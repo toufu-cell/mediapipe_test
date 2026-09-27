@@ -56,12 +56,20 @@ class FakeHandLandmarker(FakeLandmarker):
 
 
 class FakeVideoCapture:
-    def __init__(self, frames, fps: float = 30.0, width: int = 640, height: int = 480) -> None:
+    def __init__(
+        self,
+        frames,
+        fps: float = 30.0,
+        width: int = 640,
+        height: int = 480,
+        pts_ms: list[float] | None = None,
+    ) -> None:
         self._frames = list(frames)
         self._fps = fps
         self._width = width
         self._height = height
         self._index = 0
+        self._pts_ms = pts_ms
 
     def isOpened(self) -> bool:
         return True
@@ -74,6 +82,8 @@ class FakeVideoCapture:
         return True, frame
 
     def get(self, prop_id: int) -> float:
+        if prop_id == 0 and self._pts_ms is not None and self._index > 0:
+            return self._pts_ms[self._index - 1]
         mapping = {
             5: self._fps,
             7: float(len(self._frames)),
@@ -564,9 +574,9 @@ def test_extract_pose_video_writes_hand_json_and_csv_when_requested(monkeypatch,
     assert hand_data["metadata"]["sourceWidth"] == 640
     assert hand_data["metadata"]["sourceHeight"] == 480
     assert hand_data["metadata"]["mirrored"] is False
-    assert hand_data["metadata"]["handednessAssumesMirroredInput"] is True
-    assert hand_data["metadata"]["handednessAdjustedForMirroring"] is True
-    assert hand_data["frames"][0]["hands"][0]["handedness"] == "Left"
+    assert hand_data["metadata"]["handednessAssumesMirroredInput"] is False
+    assert hand_data["metadata"]["handednessAdjustedForMirroring"] is False
+    assert hand_data["frames"][0]["hands"][0]["handedness"] == "Right"
     assert hand_data["frames"][0]["hands"][0]["rawHandedness"] == "Right"
     assert hand_data["frames"][0]["hands"][0]["score"] == 0.88
     assert len(hand_data["frames"][0]["hands"][0]["landmarks"]) == 21
@@ -576,8 +586,107 @@ def test_extract_pose_video_writes_hand_json_and_csv_when_requested(monkeypatch,
         hand_rows = list(csv.reader(fh))
 
     assert hand_rows[0][0:5] == ["timestamp_ms", "frame_index", "hand_index", "handedness", "score"]
-    assert hand_rows[1][0:5] == ["0", "0", "0", "Left", "0.88"]
-    assert len(hand_rows) == 2
+    assert hand_rows[1][0:5] == ["0", "0", "", "Left", ""]
+    detected_index = hand_rows[0].index("detected")
+    missing_reason_index = hand_rows[0].index("missing_reason")
+    assert hand_rows[2][0:5] == ["0", "0", "0", "Right", "0.88"]
+    assert hand_rows[2][detected_index] == "true"
+    assert hand_rows[1][detected_index] == "false"
+    assert hand_rows[1][missing_reason_index] == "not_detected"
+    assert len(hand_rows) == 5
+
+
+def test_extract_hands_only_uses_container_pts_and_writes_no_pose_outputs(monkeypatch, tmp_path: Path) -> None:
+    import extract_pose_video as epv
+
+    fake_capture = FakeVideoCapture(
+        frames=["frame-1", "frame-2"],
+        pts_ms=[0.0, 47.0],
+    )
+    fake_hand_landmarker = FakeHandLandmarker([
+        FakeHandResult([build_hand_landmarks()], [[FakeHandCategory("Left", 0.91)]]),
+        FakeHandResult([], []),
+    ])
+    pose_create_calls = []
+
+    monkeypatch.setattr(epv, "open_video_capture", lambda video_path: fake_capture)
+    monkeypatch.setattr(epv, "create_pose_landmarker", lambda model_path: pose_create_calls.append(model_path))
+    monkeypatch.setattr(epv, "create_hand_landmarker", lambda model_path, num_hands=2: fake_hand_landmarker)
+    monkeypatch.setattr(epv, "convert_frame_to_mp_image", lambda frame: frame)
+    monkeypatch.setattr(epv, "ensure_model_file", lambda model_path, model_url=None: model_path)
+
+    output_dir = tmp_path / "output"
+    result = epv.extract_pose_video(
+        video_path=tmp_path / "sample.mp4",
+        output_dir=output_dir,
+        model_path=tmp_path / "pose.task",
+        hand_model_path=tmp_path / "hand.task",
+        extract_pose=False,
+        detect_hands=True,
+    )
+
+    assert pose_create_calls == []
+    assert result["json_path"] is None
+    assert result["csv_path"] is None
+    assert result["frame_metadata_path"] is None
+    assert not (output_dir / "sample_skeleton_data.json").exists()
+    assert not (output_dir / "sample_33landmarks.csv").exists()
+
+    hand_data = json.loads((output_dir / "sample_hand_landmarks.json").read_text())
+    assert [frame["timestampMs"] for frame in hand_data["frames"]] == [0, 47]
+    assert hand_data["metadata"]["timestampSources"] == ["container_pts"]
+    assert hand_data["frames"][0]["hands"][0]["handedness"] == "Left"
+    assert hand_data["frames"][0]["hands"][0]["rawHandedness"] == "Left"
+
+    with (output_dir / "sample_hand_landmarks.csv").open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 4
+    assert {row["timestamp_source"] for row in rows} == {"container_pts"}
+    first_frame_rows = [row for row in rows if row["frame_index"] == "0"]
+    assert next(row for row in first_frame_rows if row["handedness"] == "Left")["detected"] == "true"
+    assert next(row for row in first_frame_rows if row["handedness"] == "Right")["detected"] == "false"
+
+
+@pytest.mark.parametrize(
+    ("handedness", "message"),
+    [
+        ([], "one handedness entry"),
+        ([[FakeHandCategory("Unknown", 0.9)]], "unsupported handedness"),
+    ],
+)
+def test_extract_hand_payloads_rejects_invalid_handedness(handedness, message: str) -> None:
+    import extract_pose_video as epv
+
+    result = FakeHandResult([build_hand_landmarks()], handedness)
+
+    with pytest.raises(ValueError, match=message):
+        epv.extract_hand_payloads(result)
+
+
+def test_extract_hand_payloads_rejects_invalid_landmark_count() -> None:
+    import extract_pose_video as epv
+
+    result = FakeHandResult(
+        [build_hand_landmarks()[:-1]],
+        [[FakeHandCategory("Right", 0.9)]],
+    )
+
+    with pytest.raises(ValueError, match="21 landmarks"):
+        epv.extract_hand_payloads(result)
+
+
+def test_hands_only_rejects_pose_overlay_before_opening_video(tmp_path: Path) -> None:
+    import extract_pose_video as epv
+
+    with pytest.raises(ValueError, match="hands-only"):
+        epv.extract_pose_video(
+            video_path=tmp_path / "sample.mp4",
+            output_dir=tmp_path / "output",
+            model_path=tmp_path / "pose.task",
+            extract_pose=False,
+            detect_hands=True,
+            write_overlay_video=True,
+        )
 
 
 def test_extract_pose_video_passes_hand_json_to_overlay_when_requested(monkeypatch, tmp_path: Path) -> None:
@@ -585,7 +694,9 @@ def test_extract_pose_video_passes_hand_json_to_overlay_when_requested(monkeypat
 
     fake_capture = FakeVideoCapture(frames=["frame-1"])
     fake_pose_landmarker = FakeLandmarker([FakeResult([build_landmarks()])])
-    fake_hand_landmarker = FakeHandLandmarker([FakeHandResult([build_hand_landmarks()])])
+    fake_hand_landmarker = FakeHandLandmarker([
+        FakeHandResult([build_hand_landmarks()], [[FakeHandCategory("Right", 0.99)]])
+    ])
     overlay_calls = {}
 
     monkeypatch.setattr(epv, "open_video_capture", lambda video_path: fake_capture)
@@ -676,6 +787,7 @@ def test_main_passes_paths_to_extract_pose_video(monkeypatch, tmp_path: Path) ->
         max_interpolation_ms: float = 250.0,
         arm_selection: str = "both",
         arm_selection_min_score_margin: float = 0.5,
+        extract_pose: bool = True,
         detect_hands: bool = False,
         hand_model_path: Path = epv.DEFAULT_HAND_MODEL_PATH,
         hand_model_url: str = epv.DEFAULT_HAND_MODEL_URL,
@@ -698,6 +810,7 @@ def test_main_passes_paths_to_extract_pose_video(monkeypatch, tmp_path: Path) ->
         called["max_interpolation_ms"] = max_interpolation_ms
         called["arm_selection"] = arm_selection
         called["arm_selection_min_score_margin"] = arm_selection_min_score_margin
+        called["extract_pose"] = extract_pose
         called["detect_hands"] = detect_hands
         called["hand_model_path"] = hand_model_path
         called["hand_model_url"] = hand_model_url
@@ -771,6 +884,7 @@ def test_main_passes_paths_to_extract_pose_video(monkeypatch, tmp_path: Path) ->
     assert called["max_interpolation_ms"] == 200.0
     assert called["arm_selection"] == "auto-visible"
     assert called["arm_selection_min_score_margin"] == 0.7
+    assert called["extract_pose"] is True
     assert called["detect_hands"] is True
     assert called["hand_model_path"] == tmp_path / "hand.task"
     assert called["hand_model_url"] == "https://example.test/hand.task"
